@@ -12,6 +12,7 @@ import type {
   OperationRun,
   ProblemDetail,
   RenderVideoBatch,
+  RegenerateSpokenSegmentRequest,
   RetranslateStoryRequest,
   RetentionCleanupCommand,
   ReviewSourceTranscriptionRequest,
@@ -211,6 +212,22 @@ export async function retranslateStory(storyId: string, body: RetranslateStoryRe
     params: {path: {story_id: storyId}},
     body,
   });
+  if (result.error !== undefined) throwProblem(result.error, result.response);
+  return result.data;
+}
+
+export async function regenerateSpokenSegment(
+  storyId: string,
+  segmentId: string,
+  body: RegenerateSpokenSegmentRequest,
+) {
+  const result = await api.POST(
+    '/api/v1/stories/{story_id}/script/segments/{segment_id}/regenerate-spoken',
+    {
+      params: {path: {story_id: storyId, segment_id: segmentId}},
+      body,
+    },
+  );
   if (result.error !== undefined) throwProblem(result.error, result.response);
   return result.data;
 }

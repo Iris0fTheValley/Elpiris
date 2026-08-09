@@ -13,6 +13,7 @@ from god_news.domain.models import (
     MemoryQuery,
     MemoryWrite,
     ProductionManifest,
+    RegeneratedSpokenSegment,
     ReviewRecord,
     ScriptDocument,
     ScriptDraft,
@@ -55,6 +56,17 @@ class TextGenerator(Protocol):
         preferences: ScriptPreferences,
         memories: Sequence[MemoryItem],
     ) -> ScriptDraft: ...
+
+    async def regenerate_spoken_segment(
+        self,
+        *,
+        story_id: UUID,
+        segment_id: UUID,
+        caption_text: str,
+        caption_language: str,
+        spoken_language: str,
+        memories: Sequence[MemoryItem],
+    ) -> RegeneratedSpokenSegment: ...
 
     async def aclose(self) -> None: ...
 

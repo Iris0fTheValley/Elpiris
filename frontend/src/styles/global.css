@@ -1797,11 +1797,25 @@ time {
 }
 
 .segment-text {
-  grid-row: span 2;
+  display: grid;
+  gap: 12px;
 }
 
 .segment-text .textarea {
   min-height: 144px;
+}
+
+.segment-spoken-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.compact-button {
+  min-height: 30px;
+  padding: 5px 9px;
+  font-size: 0.78rem;
 }
 
 .segment-visual {

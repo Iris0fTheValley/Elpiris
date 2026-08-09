@@ -67,6 +67,29 @@ async def test_api_drives_the_full_offline_pipeline(stack: Stack) -> None:
             assert first.json()["status"] == "SCRIPT_READY"
             assert first.json()["audio"] is None
 
+            segment = first.json()["script"]["segments"][0]
+            regenerated = await client.post(
+                f"/api/v1/stories/{story_id}/script/segments/"
+                f"{segment['segment_id']}/regenerate-spoken",
+                json={
+                    "expected_story_version": first.json()["version"],
+                    "expected_script_revision": first.json()["script"]["revision"],
+                    "caption_text": "这是一条经过人工修改的中文字幕。",
+                    "caption_language": "zh-CN",
+                    "spoken_language": "en-US",
+                },
+            )
+            assert regenerated.status_code == 200
+            assert regenerated.json() == {
+                "segment_id": segment["segment_id"],
+                "spoken_text": "[offline en-US] 这是一条经过人工修改的中文字幕。",
+                "spoken_language": "en-US",
+            }
+            assert stack.generator.spoken_regeneration_calls == 1
+            unchanged = await client.get(f"/api/v1/stories/{story_id}")
+            assert unchanged.json()["version"] == first.json()["version"]
+            assert unchanged.json()["script"] == first.json()["script"]
+
             script_review = await client.post(
                 f"/api/v1/stories/{story_id}/reviews/script",
                 json={
@@ -144,6 +167,12 @@ async def test_api_drives_the_full_offline_pipeline(stack: Stack) -> None:
                     "operationId"
                 ]
                 == "retranslateStory"
+            )
+            assert (
+                openapi.json()["paths"][
+                    "/api/v1/stories/{story_id}/script/segments/{segment_id}/regenerate-spoken"
+                ]["post"]["operationId"]
+                == "regenerateSpokenSegment"
             )
             create_schema = openapi.json()["components"]["schemas"]["CreateStoryRequest"]
             assert create_schema["required"] == ["source", "target_language"]

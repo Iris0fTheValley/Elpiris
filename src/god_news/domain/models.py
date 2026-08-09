@@ -646,6 +646,22 @@ class RetranslateStoryRequest(DomainModel):
     expected_story_version: int = Field(ge=1)
 
 
+class RegenerateSpokenSegmentRequest(DomainModel):
+    """Generate one spoken-language segment from its human-editable caption."""
+
+    expected_story_version: int = Field(ge=1)
+    expected_script_revision: int = Field(ge=1)
+    caption_text: NonBlankStr
+    caption_language: NonBlankStr
+    spoken_language: NonBlankStr
+
+
+class RegeneratedSpokenSegment(DomainModel):
+    segment_id: UUID
+    spoken_text: NonBlankStr
+    spoken_language: NonBlankStr
+
+
 class ReviewRecord(DomainModel):
     review_id: UUID = Field(default_factory=uuid4)
     story_id: UUID

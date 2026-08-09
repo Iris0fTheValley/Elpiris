@@ -592,6 +592,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/stories/{story_id}/script/segments/{segment_id}/regenerate-spoken": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Regenerate Spoken Segment */
+        post: operations["regenerateSpokenSegment"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stories/{story_id}/source-media": {
         parameters: {
             query?: never;
@@ -3572,6 +3589,34 @@ export interface components {
             source: "reddit";
             /** Subreddit */
             subreddit: string;
+        };
+        /**
+         * RegenerateSpokenSegmentRequest
+         * @description Generate one spoken-language segment from its human-editable caption.
+         */
+        RegenerateSpokenSegmentRequest: {
+            /** Caption Language */
+            caption_language: string;
+            /** Caption Text */
+            caption_text: string;
+            /** Expected Script Revision */
+            expected_script_revision: number;
+            /** Expected Story Version */
+            expected_story_version: number;
+            /** Spoken Language */
+            spoken_language: string;
+        };
+        /** RegeneratedSpokenSegment */
+        RegeneratedSpokenSegment: {
+            /**
+             * Segment Id
+             * Format: uuid
+             */
+            segment_id: string;
+            /** Spoken Language */
+            spoken_language: string;
+            /** Spoken Text */
+            spoken_text: string;
         };
         /** RenderVideoBatch */
         RenderVideoBatch: {
@@ -8200,6 +8245,87 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["Story"];
+                };
+            };
+            /** @description Requested story was not found. */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description State or version conflict. */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Request validation or source policy error. */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Unexpected internal failure. */
+            500: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Fetcher, LLM, or TTS provider failure. */
+            502: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+            /** @description Required service is not configured. */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProblemDetail"];
+                };
+            };
+        };
+    };
+    regenerateSpokenSegment: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                story_id: string;
+                segment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["RegenerateSpokenSegmentRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RegeneratedSpokenSegment"];
                 };
             };
             /** @description Requested story was not found. */

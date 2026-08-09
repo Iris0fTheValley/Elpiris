@@ -1,10 +1,19 @@
-import {fireEvent, screen, within} from '@testing-library/react';
+import {fireEvent, screen, waitFor, within} from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import {describe, expect, it, vi} from 'vitest';
 
 import {ScriptEditor} from '@/features/script/ScriptEditor';
 import {scriptFixture} from '@test/fixtures';
 import {renderWithApp} from '@test/render';
+
+const apiMocks = vi.hoisted(() => ({
+  regenerateSpokenSegment: vi.fn(),
+}));
+
+vi.mock('@/api/client', async () => {
+  const actual = await vi.importActual<Record<string, unknown>>('@/api/client');
+  return {...actual, regenerateSpokenSegment: apiMocks.regenerateSpokenSegment};
+});
 
 describe('ScriptEditor', () => {
   it('reorders segments while restoring a contiguous sequence', async () => {
@@ -43,6 +52,68 @@ describe('ScriptEditor', () => {
       kind: 'translation',
       language: 'zh-CN',
       text: '外面正下着大雨。',
+    });
+  });
+
+  it('places editable captions above read-only foreign speech and regenerates that speech', async () => {
+    const user = userEvent.setup();
+    const onChange = vi.fn();
+    const bilingual = structuredClone(scriptFixture);
+    bilingual.spoken_language = 'en-US';
+    bilingual.segments[0].spoken_text = 'It is raining heavily.';
+    bilingual.segments[0].spoken_language = 'en-US';
+    bilingual.segments[0].captions = [
+      {kind: 'verbatim', language: 'en-US', text: 'It is raining heavily.'},
+      {kind: 'translation', language: 'zh-CN', text: '雨下得很大。'},
+    ];
+    const segmentId = bilingual.segments[0].segment_id ?? '';
+    apiMocks.regenerateSpokenSegment.mockResolvedValue({
+      segment_id: segmentId,
+      spoken_text: 'It is pouring outside.',
+      spoken_language: 'en-US',
+    });
+    const {rerender} = renderWithApp(
+      <ScriptEditor
+        script={bilingual}
+        onChange={onChange}
+        storyId="story-a"
+        storyVersion={4}
+      />,
+    );
+
+    const translation = screen.getByLabelText('翻译字幕 · zh-CN');
+    const spokenText = screen.getAllByLabelText('口播文本')[0];
+    expect(
+      translation.compareDocumentPosition(spokenText) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy();
+    expect(spokenText).toHaveAttribute('readonly');
+
+    fireEvent.change(translation, {target: {value: '外面正下着倾盆大雨。'}});
+    const edited = onChange.mock.calls.at(-1)?.[0] as typeof bilingual;
+    rerender(
+      <ScriptEditor script={edited} onChange={onChange} storyId="story-a" storyVersion={4} />,
+    );
+    await user.click(screen.getByRole('button', {name: '重新生成第 1 段口播'}));
+
+    await waitFor(() => expect(apiMocks.regenerateSpokenSegment).toHaveBeenCalledWith(
+      'story-a',
+      segmentId,
+      {
+        expected_story_version: 4,
+        expected_script_revision: bilingual.revision,
+        caption_text: '外面正下着倾盆大雨。',
+        caption_language: 'zh-CN',
+        spoken_language: 'en-US',
+      },
+    ));
+    await waitFor(() => {
+      const regenerated = onChange.mock.calls.at(-1)?.[0] as typeof bilingual;
+      expect(regenerated.segments[0].spoken_text).toBe('It is pouring outside.');
+      expect(regenerated.segments[0]?.captions).toContainEqual({
+        kind: 'verbatim',
+        language: 'en-US',
+        text: 'It is pouring outside.',
+      });
     });
   });
 

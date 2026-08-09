@@ -6387,6 +6387,73 @@
         "title": "RedditSourceFields",
         "type": "object"
       },
+      "RegenerateSpokenSegmentRequest": {
+        "additionalProperties": false,
+        "description": "Generate one spoken-language segment from its human-editable caption.",
+        "properties": {
+          "caption_language": {
+            "minLength": 1,
+            "title": "Caption Language",
+            "type": "string"
+          },
+          "caption_text": {
+            "minLength": 1,
+            "title": "Caption Text",
+            "type": "string"
+          },
+          "expected_script_revision": {
+            "minimum": 1.0,
+            "title": "Expected Script Revision",
+            "type": "integer"
+          },
+          "expected_story_version": {
+            "minimum": 1.0,
+            "title": "Expected Story Version",
+            "type": "integer"
+          },
+          "spoken_language": {
+            "minLength": 1,
+            "title": "Spoken Language",
+            "type": "string"
+          }
+        },
+        "required": [
+          "expected_story_version",
+          "expected_script_revision",
+          "caption_text",
+          "caption_language",
+          "spoken_language"
+        ],
+        "title": "RegenerateSpokenSegmentRequest",
+        "type": "object"
+      },
+      "RegeneratedSpokenSegment": {
+        "additionalProperties": false,
+        "properties": {
+          "segment_id": {
+            "format": "uuid",
+            "title": "Segment Id",
+            "type": "string"
+          },
+          "spoken_language": {
+            "minLength": 1,
+            "title": "Spoken Language",
+            "type": "string"
+          },
+          "spoken_text": {
+            "minLength": 1,
+            "title": "Spoken Text",
+            "type": "string"
+          }
+        },
+        "required": [
+          "segment_id",
+          "spoken_text",
+          "spoken_language"
+        ],
+        "title": "RegeneratedSpokenSegment",
+        "type": "object"
+      },
       "RenderVideoBatch": {
         "additionalProperties": false,
         "properties": {
@@ -14758,6 +14825,120 @@
         "summary": "Second Review",
         "tags": [
           "reviews"
+        ]
+      }
+    },
+    "/api/v1/stories/{story_id}/script/segments/{segment_id}/regenerate-spoken": {
+      "post": {
+        "operationId": "regenerateSpokenSegment",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "story_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Story Id",
+              "type": "string"
+            }
+          },
+          {
+            "in": "path",
+            "name": "segment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Segment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RegenerateSpokenSegmentRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RegeneratedSpokenSegment"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Requested story was not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "State or version conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Request validation or source policy error."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Unexpected internal failure."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Fetcher, LLM, or TTS provider failure."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Required service is not configured."
+          }
+        },
+        "summary": "Regenerate Spoken Segment",
+        "tags": [
+          "stories",
+          "artifacts"
         ]
       }
     },

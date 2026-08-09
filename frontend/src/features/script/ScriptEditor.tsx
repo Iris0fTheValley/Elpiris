@@ -6,6 +6,7 @@ import {
   ImagePlus,
   Link2,
   Plus,
+  RefreshCw,
   Redo2,
   Trash2,
   Undo2,
@@ -16,6 +17,7 @@ import {useCallback, useEffect, useId, useRef, useState, type ChangeEvent} from 
 import {
   deleteSegmentVisualAsset,
   listStoryVisualAssets,
+  regenerateSpokenSegment,
   uploadSegmentVisualAsset,
   visualAssetContentUrl,
 } from '../../api/client';
@@ -99,6 +101,11 @@ function withSpokenLanguage(segment: ScriptSegment, language: string): ScriptSeg
   };
 }
 
+function sameLanguage(left: string, right: string): boolean {
+  return left.trim().toLocaleLowerCase().split(/[-_]/u)[0]
+    === right.trim().toLocaleLowerCase().split(/[-_]/u)[0];
+}
+
 function ScriptEditorInner({
   script,
   onChange,
@@ -112,6 +119,7 @@ function ScriptEditorInner({
 }: ScriptEditorProps) {
   const queryClient = useQueryClient();
   const fileInput = useRef<HTMLInputElement>(null);
+  const scriptRef = useRef(script);
   const roleOptionsId = useId();
   const [pendingUploadSegmentId, setPendingUploadSegmentId] = useState<string | null>(null);
   const [knownStoryVersion, setKnownStoryVersion] = useState<number | undefined>(storyVersion);
@@ -119,6 +127,10 @@ function ScriptEditorInner({
   /* ── Undo/redo history stack ── */
   const [past, setPast] = useState<ScriptSnapshot[]>([]);
   const [future, setFuture] = useState<ScriptSnapshot[]>([]);
+
+  useEffect(() => {
+    scriptRef.current = script;
+  }, [script]);
 
   const visualAssetsQuery = useQuery({
     queryKey: queryKeys.visualAssets(storyId ?? ''),
@@ -177,6 +189,50 @@ function ScriptEditorInner({
     onSuccess: async (usedStoryVersion) => {
       setKnownStoryVersion(usedStoryVersion + 1);
       await refreshVisualContext();
+    },
+  });
+
+  const regenerateSpokenMutation = useMutation({
+    mutationFn: async ({
+      segmentId,
+      captionText,
+      captionLanguage,
+      spokenLanguage,
+    }: {
+      segmentId: string;
+      captionText: string;
+      captionLanguage: string;
+      spokenLanguage: string;
+    }) => {
+      if (storyId === undefined || effectiveStoryVersion === undefined) {
+        throw new Error('故事版本不可用，请重新载入后再生成口播。');
+      }
+      return regenerateSpokenSegment(storyId, segmentId, {
+        expected_story_version: effectiveStoryVersion,
+        expected_script_revision: script.revision,
+        caption_text: captionText,
+        caption_language: captionLanguage,
+        spoken_language: spokenLanguage,
+      });
+    },
+    onSuccess: (result) => {
+      const currentScript = scriptRef.current;
+      const index = currentScript.segments.findIndex(
+        (item) => item.segment_id === result.segment_id,
+      );
+      if (index < 0) return;
+      const segment = currentScript.segments[index];
+      const segments = currentScript.segments.map((item, itemIndex) => (
+        itemIndex === index
+          ? withSpokenText(
+            {...segment, spoken_language: result.spoken_language},
+            result.spoken_text,
+          )
+          : item
+      ));
+      setPast((previous) => [...previous.slice(-49), snapshotScript(currentScript)]);
+      setFuture([]);
+      onChange({...currentScript, segments});
     },
   });
 
@@ -312,6 +368,7 @@ function ScriptEditorInner({
   const sourceScreenshot = visualAssetsQuery.data?.source_page_screenshot;
   const sourceCandidateUrl = visualAssetsQuery.data?.source_page_url;
   const visualError = visualAssetsQuery.error ?? uploadVisualMutation.error ?? deleteVisualMutation.error;
+  const regenerationError = regenerateSpokenMutation.error;
 
   return (
     <div className="script-editor">
@@ -357,6 +414,7 @@ function ScriptEditorInner({
         )}
       </div>
       {visualError === null ? null : <ApiErrorNotice error={visualError} />}
+      {regenerationError === null ? null : <ApiErrorNotice error={regenerationError} />}
       <ol className="segment-list">
         {script.segments.map((segment, index) => {
           const segmentId = segment.segment_id;
@@ -368,6 +426,22 @@ function ScriptEditorInner({
           const isDeleting = deleteVisualMutation.isPending
             && deleteVisualMutation.variables === segmentId;
           const canMutateSegmentVisual = canMutateVisuals && segmentId !== undefined;
+          const translationCaptions = (segment.captions ?? []).filter(
+            (caption) => caption.kind === 'translation',
+          );
+          const regenerationCaption = translationCaptions[0];
+          const isForeignGeneratedText = regenerationCaption !== undefined
+            && !sameLanguage(regenerationCaption.language, segment.spoken_language);
+          const isRegenerating = regenerateSpokenMutation.isPending
+            && regenerateSpokenMutation.variables?.segmentId === segmentId;
+          const canRegenerate = (
+            !readOnly
+            && storyId !== undefined
+            && effectiveStoryVersion !== undefined
+            && segmentId !== undefined
+            && regenerationCaption !== undefined
+            && regenerationCaption.text.trim() !== ''
+          );
           return (
             <li key={segment.segment_id ?? `${String(index)}-${segment.spoken_text}`} className="segment-block">
               <div className="segment-identity">
@@ -424,44 +498,70 @@ function ScriptEditorInner({
                 </label>
               </div>
               <div className="segment-text">
+                {translationCaptions.map((caption) => (
+                  <label className="field" key={`${caption.kind}-${caption.language}`}>
+                    <span>翻译字幕 · {caption.language}</span>
+                    <textarea
+                      className="textarea compact"
+                      value={caption.text}
+                      readOnly={readOnly}
+                      onChange={(event) => updateSegment(index, {
+                        captions: (segment.captions ?? []).map((item) => item === caption
+                          ? {...item, text: event.target.value}
+                          : item),
+                      })}
+                    />
+                  </label>
+                ))}
                 <label className="field">
                   <span>口播语言</span>
-                <select
-                  className="select mono"
-                  value={segment.spoken_language}
-                  disabled={readOnly}
-                  onChange={(event) => replaceSegment(index, withSpokenLanguage(segment, event.target.value))}
-                >
-                  {SPOKEN_LANGUAGE_OPTIONS.map((language) => (
-                    <option key={language.value} value={language.value}>{language.label}</option>
-                  ))}
-                </select>
+                  <select
+                    className="select mono"
+                    value={segment.spoken_language}
+                    disabled={readOnly}
+                    onChange={(event) => replaceSegment(index, withSpokenLanguage(segment, event.target.value))}
+                  >
+                    {SPOKEN_LANGUAGE_OPTIONS.map((language) => (
+                      <option key={language.value} value={language.value}>{language.label}</option>
+                    ))}
+                  </select>
                 </label>
-                <label className="field">
-                  <span>口播文本</span>
-                <textarea
-                  className="textarea"
-                  value={segment.spoken_text}
-                  readOnly={readOnly}
-                  onChange={(event) => replaceSegment(index, withSpokenText(segment, event.target.value))}
-                />
-                </label>
-              </div>
-              {(segment.captions ?? []).filter((caption) => caption.kind === 'translation').map((caption) => (
-                <label className="field segment-text" key={`${caption.kind}-${caption.language}`}>
-                  <span>翻译字幕 · {caption.language}</span>
+                <div className="field">
+                  <div className="segment-spoken-heading">
+                    <span>口播文本</span>
+                    {regenerationCaption === undefined || readOnly ? null : (
+                      <button
+                        className="button secondary compact-button"
+                        type="button"
+                        disabled={!canRegenerate || isRegenerating}
+                        aria-label={`重新生成第 ${String(index + 1)} 段口播`}
+                        onClick={() => {
+                          if (segmentId === undefined || regenerationCaption === undefined) return;
+                          regenerateSpokenMutation.mutate({
+                            segmentId,
+                            captionText: regenerationCaption.text,
+                            captionLanguage: regenerationCaption.language,
+                            spokenLanguage: segment.spoken_language,
+                          });
+                        }}
+                      >
+                        <RefreshCw size={14} aria-hidden="true" />
+                        {isRegenerating ? '生成中' : '重新生成'}
+                      </button>
+                    )}
+                  </div>
                   <textarea
-                    className="textarea compact"
-                    value={caption.text}
-                    readOnly={readOnly}
-                    onChange={(event) => updateSegment(index, {
-                      captions: (segment.captions ?? []).map((item) => item === caption
-                        ? {...item, text: event.target.value}
-                        : item),
-                    })}
+                    className="textarea"
+                    aria-label="口播文本"
+                    value={segment.spoken_text}
+                    readOnly={readOnly || isForeignGeneratedText}
+                    onChange={(event) => replaceSegment(index, withSpokenText(segment, event.target.value))}
                   />
-                </label>
-              ))}
+                  {isForeignGeneratedText && !readOnly ? (
+                    <small>请编辑上方字幕，再由模型重新生成外语口播。</small>
+                  ) : null}
+                </div>
+              </div>
               <section className="segment-visual" aria-label={`第 ${String(index + 1)} 段画面素材`}>
                 <div className="segment-visual-heading">
                   <span>画面 / 图片</span>

@@ -26,6 +26,7 @@ pnpm --dir frontend check
 | 重开终审 | `POST /api/v1/stories/{story_id}/reopen` | 仅 `DONE → PENDING_SECOND_REVIEW`。 |
 | 初审 | `POST /api/v1/stories/{id}/reviews/first` | 可在此提交 `preferences` 覆盖（播报风格、目标时长、默认角色、情绪、语速等）；批准后只生成口播脚本，不启动 TTS。 |
 | 口播脚本审核 | `POST /api/v1/stories/{id}/reviews/script` | 仅 `SCRIPT_READY` 可用。批准后进入 `PENDING_TTS`；`request_changes` 可带 `revised_script`，仍停留在脚本审核门。 |
+| 单段口播重生成 | `POST /api/v1/stories/{id}/script/segments/{segment_id}/regenerate-spoken` | 人工编辑可读字幕后，按该字幕与所选口播语言重新生成单段 TTS 文本。仅返回预览，不直接写入故事，避免覆盖页面中其他未保存修订；正式保存仍走脚本审核接口。 |
 | 手动语音合成 | `POST /api/v1/stories/{id}/synthesize` | 请求体只有 `{expected_story_version}`。仅 `PENDING_TTS` 可用，先持久化为 `PROCESSING_TTS`，成功后进入终审；失败安全回退 `PENDING_TTS` 并写入 `last_failure`。 |
 | 终审 | `POST /api/v1/stories/{id}/reviews/second` | 仅 `PENDING_SECOND_REVIEW` 可用。终审携带 `revised_script` 时会清空音频并返回 `SCRIPT_READY`，必须重新审核脚本后手动合成。 |
 

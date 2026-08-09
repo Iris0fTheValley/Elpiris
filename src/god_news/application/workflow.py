@@ -19,6 +19,8 @@ from god_news.domain.models import (
     MemoryWrite,
     PipelineFailure,
     ProductionManifest,
+    RegeneratedSpokenSegment,
+    RegenerateSpokenSegmentRequest,
     RetranslateStoryRequest,
     ReviewRecord,
     ScriptDocument,
@@ -236,6 +238,46 @@ class StoryWorkflow:
                 except Exception as exc:
                     await self._store_failure(story, exc)
                     raise
+
+    async def regenerate_spoken_segment(
+        self,
+        story_id: UUID,
+        segment_id: UUID,
+        request: RegenerateSpokenSegmentRequest,
+    ) -> RegeneratedSpokenSegment:
+        """Generate a preview from the edited caption without overwriting local script edits."""
+
+        async with self._lock_for(story_id):
+            story = await self._repository.get(story_id)
+            if request.expected_story_version != story.version:
+                raise ConcurrentWriteError(story_id)
+            if story.status not in {StoryStatus.SCRIPT_READY, StoryStatus.PENDING_SECOND_REVIEW}:
+                raise StoryInvariantError(
+                    story_id,
+                    "Spoken text can only be regenerated while the script is editable.",
+                )
+            if story.script is None:
+                raise ArtifactNotReadyError(story_id, "Script is missing.")
+            if request.expected_script_revision != story.script.revision:
+                raise StoryInvariantError(
+                    story_id,
+                    "Script changed concurrently; reload it and retry.",
+                )
+            if not any(item.segment_id == segment_id for item in story.script.segments):
+                raise StoryInvariantError(story_id, "Script segment was not found.")
+
+            memories = await self._memory.recall(
+                f"narration context for {story.title or story.source.title}: "
+                f"{request.caption_text[:500]}"
+            )
+            return await self._generator.regenerate_spoken_segment(
+                story_id=story_id,
+                segment_id=segment_id,
+                caption_text=request.caption_text,
+                caption_language=request.caption_language,
+                spoken_language=request.spoken_language,
+                memories=memories,
+            )
 
     async def reopen(self, story_id: UUID) -> Story:
         """Return a completed story to the final-review gate for another pass."""

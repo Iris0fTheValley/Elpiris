@@ -109,6 +109,62 @@ async def test_deepseek_payload_disables_thinking_and_validates_json() -> None:
 
 
 @pytest.mark.asyncio
+async def test_spoken_segment_regeneration_uses_caption_as_source_of_truth() -> None:
+    completion = SimpleNamespace(
+        choices=[
+            SimpleNamespace(
+                finish_reason="stop",
+                message=SimpleNamespace(
+                    content=json.dumps({"spoken_text": "It is pouring outside."})
+                ),
+            )
+        ]
+    )
+    create = AsyncMock(return_value=completion)
+    fake_client = SimpleNamespace(
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create)),
+        close=AsyncMock(),
+    )
+    generator = OpenAICompatibleTextGenerator(
+        provider=LLMProvider.DEEPSEEK,
+        api_key="test",
+        base_url="https://api.deepseek.com",
+        model="deepseek-v4-flash",
+        timeout_seconds=5,
+        max_retries=0,
+        validation_retries=0,
+        max_output_tokens=1024,
+        temperature=0.1,
+        max_source_characters=1000,
+        max_memory_characters=100,
+        thinking_enabled=False,
+    )
+    await generator._client.close()  # type: ignore[attr-defined]
+    generator._client = fake_client  # type: ignore[assignment]
+    story_id = uuid4()
+    segment_id = uuid4()
+
+    result = await generator.regenerate_spoken_segment(
+        story_id=story_id,
+        segment_id=segment_id,
+        caption_text="外面正下着倾盆大雨。",
+        caption_language="zh-CN",
+        spoken_language="en-US",
+        memories=[],
+    )
+
+    assert result.segment_id == segment_id
+    assert result.spoken_text == "It is pouring outside."
+    prompt = json.loads(create.await_args.kwargs["messages"][1]["content"].splitlines()[1])
+    assert prompt == {
+        "caption_text": "外面正下着倾盆大雨。",
+        "caption_language": "zh-CN",
+        "spoken_language": "en-US",
+        "recalled_editorial_memory": [],
+    }
+
+
+@pytest.mark.asyncio
 async def test_local_provider_uses_json_schema_and_retries_invalid_output() -> None:
     invalid = SimpleNamespace(
         choices=[

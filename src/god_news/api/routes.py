@@ -17,6 +17,8 @@ from god_news.domain.models import (
     HealthReport,
     IngestRequest,
     ProductionManifest,
+    RegeneratedSpokenSegment,
+    RegenerateSpokenSegmentRequest,
     RetranslateStoryRequest,
     ReviewRecord,
     ScriptReviewSubmission,
@@ -189,6 +191,21 @@ async def retranslate_story(
     container: ContainerDependency,
 ) -> Story:
     return await container.workflow.retranslate(story_id, request)
+
+
+@router.post(
+    "/stories/{story_id}/script/segments/{segment_id}/regenerate-spoken",
+    response_model=RegeneratedSpokenSegment,
+    operation_id="regenerateSpokenSegment",
+    tags=["stories", "artifacts"],
+)
+async def regenerate_spoken_segment(
+    story_id: UUID,
+    segment_id: UUID,
+    request: RegenerateSpokenSegmentRequest,
+    container: ContainerDependency,
+) -> RegeneratedSpokenSegment:
+    return await container.workflow.regenerate_spoken_segment(story_id, segment_id, request)
 
 
 @router.post(

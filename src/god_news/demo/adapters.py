@@ -30,6 +30,7 @@ from god_news.domain.models import (
     MemoryItem,
     MemoryQuery,
     MemoryWrite,
+    RegeneratedSpokenSegment,
     ReviewRecord,
     ScriptDocument,
     ScriptDraft,
@@ -276,6 +277,7 @@ class DeterministicTextGenerator:
     def __init__(self) -> None:
         self.translation_calls = 0
         self.script_calls = 0
+        self.spoken_regeneration_calls = 0
 
     async def healthcheck(self) -> None:
         return None
@@ -349,6 +351,29 @@ class DeterministicTextGenerator:
                     visual_hint="Source headline and key facts",
                 )
             ],
+        )
+
+    async def regenerate_spoken_segment(
+        self,
+        *,
+        story_id: UUID,
+        segment_id: UUID,
+        caption_text: str,
+        caption_language: str,
+        spoken_language: str,
+        memories: Sequence[MemoryItem],
+    ) -> RegeneratedSpokenSegment:
+        del story_id, memories
+        self.spoken_regeneration_calls += 1
+        spoken_text = (
+            caption_text
+            if same_language(caption_language, spoken_language)
+            else f"[offline {spoken_language}] {caption_text}"
+        )
+        return RegeneratedSpokenSegment(
+            segment_id=segment_id,
+            spoken_text=spoken_text,
+            spoken_language=spoken_language,
         )
 
     async def aclose(self) -> None:
