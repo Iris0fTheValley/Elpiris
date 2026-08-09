@@ -276,6 +276,7 @@ class InMemoryMemoryProvider:
 class DeterministicTextGenerator:
     def __init__(self) -> None:
         self.translation_calls = 0
+        self.translation_response_cache_policies: list[bool] = []
         self.script_calls = 0
         self.spoken_regeneration_calls = 0
 
@@ -291,9 +292,11 @@ class DeterministicTextGenerator:
         source_language: str | None,
         target_language: str,
         memories: Sequence[MemoryItem],
+        response_cache: bool = True,
     ) -> TranslationResult:
         del story_id, memories
         self.translation_calls += 1
+        self.translation_response_cache_policies.append(response_cache)
         normalized = " ".join(content.split())
         chinese_source = should_preserve_chinese_source(content, source_language)
         lowered = normalized.casefold()

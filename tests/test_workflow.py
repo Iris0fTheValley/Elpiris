@@ -203,6 +203,7 @@ async def test_unreviewed_translation_can_be_regenerated_with_version_guard(stac
     assert regenerated.original_text == story.original_text
     assert regenerated.translation is not None
     assert stack.generator.translation_calls == 2
+    assert stack.generator.translation_response_cache_policies == [True, False]
 
     with pytest.raises(ConcurrentWriteError):
         await stack.workflow.retranslate(

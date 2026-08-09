@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+import logging
 from collections.abc import Callable, Sequence
 from typing import Literal, TypeVar
 from uuid import UUID
@@ -50,8 +52,10 @@ from god_news.domain.video import (
     VideoBatchStory,
 )
 from god_news.errors import ConfigurationError, LLMGenerationError
+from god_news.infrastructure.llm.response_cache import LLMResponseCache
 
 OutputT = TypeVar("OutputT", bound=BaseModel)
+logger = logging.getLogger(__name__)
 
 
 class _ThinkingControl(BaseModel):
@@ -237,6 +241,7 @@ class OpenAICompatibleTextGenerator:
         max_source_characters: int,
         max_memory_characters: int,
         thinking_enabled: bool,
+        response_cache_entries: int = 256,
     ) -> None:
         self._provider = provider
         self._model = model
@@ -246,6 +251,7 @@ class OpenAICompatibleTextGenerator:
         self._max_source_characters = max_source_characters
         self._max_memory_characters = max_memory_characters
         self._thinking_enabled = thinking_enabled
+        self._response_cache = LLMResponseCache(response_cache_entries)
         self._client = AsyncOpenAI(
             api_key=api_key,
             base_url=base_url,
@@ -274,6 +280,7 @@ class OpenAICompatibleTextGenerator:
         source_language: str | None,
         target_language: str,
         memories: Sequence[MemoryItem],
+        response_cache: bool = True,
     ) -> TranslationResult:
         if len(content) > self._max_source_characters:
             raise LLMGenerationError(
@@ -323,6 +330,7 @@ class OpenAICompatibleTextGenerator:
                     target_language=target_language,
                 )
             ),
+            response_cache=response_cache,
         )
         return TranslationResult(
             source_language=source_language or generated.source_language,
@@ -494,6 +502,7 @@ class OpenAICompatibleTextGenerator:
             input_json=prompt.model_dump_json(),
             output_type=_SpokenSegmentOutput,
             output_validator=validate,
+            response_cache=False,
         )
         return RegeneratedSpokenSegment(
             segment_id=segment_id,
@@ -889,9 +898,54 @@ class OpenAICompatibleTextGenerator:
         input_json: str,
         output_type: type[OutputT],
         output_validator: Callable[[OutputT], None] | None = None,
+        response_cache: bool = True,
     ) -> OutputT:
-        schema = json.dumps(output_type.model_json_schema(), ensure_ascii=False)
-        user_prompt = f"INPUT_JSON:\n{input_json}\n\nOUTPUT_JSON_SCHEMA:\n{schema}"
+        schema = json.dumps(
+            output_type.model_json_schema(),
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        # DeepSeek only reuses identical prefixes. Keep the stable contract before
+        # per-story input so different stories can share the longest possible prefix.
+        user_prompt = f"OUTPUT_JSON_SCHEMA:\n{schema}\n\nINPUT_JSON:\n{input_json}"
+        cache_key = self._response_cache_key(
+            system_prompt=system_prompt,
+            user_prompt=user_prompt,
+            output_type=output_type,
+        )
+
+        async def generate() -> str:
+            output = await self._request_json(
+                story_id=story_id,
+                system_prompt=system_prompt,
+                user_prompt=user_prompt,
+                output_type=output_type,
+                output_validator=output_validator,
+            )
+            return output.model_dump_json()
+
+        if response_cache:
+            cached = await self._response_cache.get_or_create(cache_key, generate)
+            if cached.source != "miss":
+                logger.info("llm response cache %s", cached.source)
+            payload = cached.payload
+        else:
+            payload = await generate()
+        output = output_type.model_validate_json(payload)
+        if output_validator is not None:
+            output_validator(output)
+        return output
+
+    async def _request_json(
+        self,
+        *,
+        story_id: UUID,
+        system_prompt: str,
+        user_prompt: str,
+        output_type: type[OutputT],
+        output_validator: Callable[[OutputT], None] | None,
+    ) -> OutputT:
         last_error: Exception | None = None
         retry_feedback: str | None = None
         for _ in range(self._validation_retries + 1):
@@ -936,6 +990,7 @@ class OpenAICompatibleTextGenerator:
                     response_format=response_format,
                     extra_body=extra_body,
                 )
+                self._log_provider_cache_usage(response)
                 if not response.choices:
                     raise ValueError("provider returned no choices")
                 choice = response.choices[0]
@@ -991,7 +1046,49 @@ class OpenAICompatibleTextGenerator:
             story_id,
         ) from last_error
 
+    def _response_cache_key(
+        self,
+        *,
+        system_prompt: str,
+        user_prompt: str,
+        output_type: type[BaseModel],
+    ) -> str:
+        canonical = json.dumps(
+            {
+                "provider": self._provider.value,
+                "model": self._model,
+                "thinking_enabled": self._thinking_enabled,
+                "max_output_tokens": self._max_output_tokens,
+                "temperature": self._temperature,
+                "system_prompt": system_prompt,
+                "user_prompt": user_prompt,
+                "output_type": f"{output_type.__module__}.{output_type.__qualname__}",
+            },
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+
+    @staticmethod
+    def _log_provider_cache_usage(response: object) -> None:
+        usage = getattr(response, "usage", None)
+        if usage is None:
+            return
+        hit_tokens = getattr(usage, "prompt_cache_hit_tokens", None)
+        miss_tokens = getattr(usage, "prompt_cache_miss_tokens", None)
+        if hit_tokens is None and miss_tokens is None:
+            details = getattr(usage, "prompt_tokens_details", None)
+            hit_tokens = getattr(details, "cached_tokens", None)
+        if hit_tokens is not None or miss_tokens is not None:
+            logger.info(
+                "llm provider prompt cache usage hit_tokens=%s miss_tokens=%s",
+                hit_tokens if hit_tokens is not None else "unknown",
+                miss_tokens if miss_tokens is not None else "unknown",
+            )
+
     async def aclose(self) -> None:
+        await self._response_cache.aclose()
         await self._client.close()
 
 

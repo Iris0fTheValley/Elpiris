@@ -391,6 +391,7 @@ async def build_container(settings: Settings) -> AppContainer:
             validation_retries=settings.llm_validation_retries,
             max_output_tokens=settings.llm_max_output_tokens,
             temperature=settings.llm_temperature,
+            response_cache_entries=settings.llm_response_cache_entries,
             max_source_characters=settings.max_source_characters,
             max_memory_characters=settings.memory_max_context_characters,
             thinking_enabled=settings.llm_thinking_enabled,

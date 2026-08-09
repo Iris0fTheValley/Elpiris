@@ -220,6 +220,7 @@ class StoryWorkflow:
                         source_language=story.source.detected_language,
                         target_language=story.target_language,
                         memories=memories,
+                        response_cache=False,
                     )
                     updated = story.model_copy(
                         update={

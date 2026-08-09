@@ -185,6 +185,7 @@ class Settings(BaseSettings):
     llm_validation_retries: int = Field(default=1, ge=0, le=2)
     llm_max_output_tokens: int = Field(default=4096, ge=256, le=32768)
     llm_temperature: float = Field(default=0.1, ge=0, le=2)
+    llm_response_cache_entries: int = Field(default=256, ge=0, le=10_000)
     max_source_characters: int = Field(default=60_000, ge=1_000, le=500_000)
 
     memory_provider: MemoryProviderName = MemoryProviderName.CHROMADB

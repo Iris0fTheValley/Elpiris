@@ -46,6 +46,7 @@ class TextGenerator(Protocol):
         source_language: str | None,
         target_language: str,
         memories: Sequence[MemoryItem],
+        response_cache: bool = True,
     ) -> TranslationResult: ...
 
     async def create_script(

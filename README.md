@@ -31,6 +31,7 @@ pnpm --filter @god-news/frontend dev
 
 - 四个固定来源自动抓取（大众新闻、Reddit、Guardian、Pikabu），三层 URL 抓取降级
 - LLM 翻译 + 摘要 + AI 内容分类，人工初审可修订
+- LLM 固定前缀优先以提高 DeepSeek 上下文缓存命中，并对已验证的完全相同请求做有界内存缓存与并发合并；人工显式重生成始终绕过旧响应
 - 初审批准后自动生成口播脚本；脚本人工审核批准后，才可显式启动本地 GPT-SoVITS 合成语音
 - 人工终审通过后产出 `ProductionManifest` 时间轴，并创建带输入资产快照的可审阅视频批次
 - 软归档（ARCHIVED）、重开终审、故事编辑，完整审计追踪
@@ -76,7 +77,7 @@ TTS 失败会安全回到 `PENDING_TTS` 并保留 `last_failure`，需要使用�
 | 后端框架 | FastAPI + Uvicorn（全异步） |
 | 数据模型 | Pydantic v2 强类型领域模型 + 状态机 |
 | 持久化 | SQLAlchemy 异步 + SQLite，乐观并发 |
-| LLM | DeepSeek V4 Flash（可选 LM Studio 本地） |
+| LLM | DeepSeek V4 Flash（可选 LM Studio 本地）；前缀缓存友好、精确响应 LRU、相同并发请求合并 |
 | 记忆 | ChromaDB 本地嵌入式持久化 |
 | TTS | GPT-SoVITS v2Pro，单个串行 loopback 子进程；按段切换角色与七情绪参考材料 |
 | 前端 | React + Vite + TanStack Query，OpenAPI 自动生成类型 |

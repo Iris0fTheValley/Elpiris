@@ -28,6 +28,11 @@ from god_news.infrastructure.llm.openai_compatible import (
 from .test_fsm import make_artifacts
 
 
+def _submitted_input(call) -> dict[str, object]:  # type: ignore[no-untyped-def]
+    content = call.kwargs["messages"][1]["content"]
+    return json.loads(content.split("INPUT_JSON:\n", maxsplit=1)[1])
+
+
 def test_legacy_translation_without_title_remains_loadable() -> None:
     translation, _, _ = make_artifacts()
     legacy = translation.model_dump(mode="json", exclude={"translated_title"})
@@ -101,11 +106,23 @@ async def test_deepseek_payload_disables_thinking_and_validates_json() -> None:
     assert result.summary == "摘要"
     assert result.translated_title == "善意新闻标题"
     kwargs = create.await_args.kwargs
-    prompt = json.loads(kwargs["messages"][1]["content"].splitlines()[1])
+    prompt = _submitted_input(create.await_args)
     assert prompt["source_title"] == "Kindness headline"
+    content = kwargs["messages"][1]["content"]
+    assert content.index("OUTPUT_JSON_SCHEMA:") < content.index("INPUT_JSON:")
     assert kwargs["extra_body"]["thinking"] == {"type": "disabled"}
     assert kwargs["response_format"] == {"type": "json_object"}
     list_models.assert_awaited_once()
+    cached = await generator.translate_and_summarize(
+        story_id=uuid4(),
+        source_title="Kindness headline",
+        content="source",
+        source_language="en",
+        target_language="zh-CN",
+        memories=[],
+    )
+    assert cached == result
+    create.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -155,13 +172,25 @@ async def test_spoken_segment_regeneration_uses_caption_as_source_of_truth() -> 
 
     assert result.segment_id == segment_id
     assert result.spoken_text == "It is pouring outside."
-    prompt = json.loads(create.await_args.kwargs["messages"][1]["content"].splitlines()[1])
+    prompt = _submitted_input(create.await_args)
     assert prompt == {
         "caption_text": "外面正下着倾盆大雨。",
         "caption_language": "zh-CN",
         "spoken_language": "en-US",
         "recalled_editorial_memory": [],
     }
+    second_segment_id = uuid4()
+    fresh = await generator.regenerate_spoken_segment(
+        story_id=uuid4(),
+        segment_id=second_segment_id,
+        caption_text="外面正下着倾盆大雨。",
+        caption_language="zh-CN",
+        spoken_language="en-US",
+        memories=[],
+    )
+    assert fresh.segment_id == second_segment_id
+    assert fresh.spoken_text == result.spoken_text
+    assert create.await_count == 2
 
 
 @pytest.mark.asyncio
@@ -857,11 +886,7 @@ async def test_timed_caption_translation_chunks_long_video_without_splitting_cue
     assert translated == {cue_ids[0]: "第一段。", cue_ids[1]: "第二段。"}
     assert create.await_count == 2
     submitted_ids = [
-        json.loads(
-            call.kwargs["messages"][1]["content"]
-            .split("INPUT_JSON:\n", maxsplit=1)[1]
-            .split("\n\nOUTPUT_JSON_SCHEMA:", maxsplit=1)[0]
-        )["cues"][0]["cue_id"]
+        _submitted_input(call)["cues"][0]["cue_id"]  # type: ignore[index]
         for call in create.await_args_list
     ]
     assert submitted_ids == [str(cue_ids[0]), str(cue_ids[1])]
