@@ -146,6 +146,34 @@ _SPORTS_PHRASES = (
     "冠军赛",
 )
 
+_DAZHONG_POLITICS_BODY_PHRASES = (
+    "台独",
+    "台军",
+    "汉光演习",
+    "军事演习",
+    "军演",
+    "民进党",
+    "国民党",
+    "解放军",
+    "两岸关系",
+    "防务部门",
+    "执政党",
+    "在野党",
+)
+_DAZHONG_SPORTS_BODY_PHRASES = (
+    "足球赛",
+    "篮球赛",
+    "乒乓球赛",
+    "世界杯",
+    "奥运会",
+    "全运会",
+    "联赛",
+    "锦标赛",
+    "冠军赛",
+    "中超",
+    "英超",
+)
+
 _GUARDIAN_QUERY_EXCLUSIONS = (
     "politics",
     "election",
@@ -188,6 +216,15 @@ class ContentAdmissionPolicy:
             return SourceAdmissionDecision(accepted=False, topic="politics")
         if self._contains_phrase(editorial_text, _SPORTS_PHRASES):
             return SourceAdmissionDecision(accepted=False, topic="sports")
+        if isinstance(item.source_fields, DazhongSourceFields):
+            # Dazhong's public pages often use a generic channel and omit tags. Scan
+            # only strong, unambiguous body markers so mixed political/sports
+            # roundups cannot enter the editorial queue.
+            body = item.content_text.casefold()
+            if self._contains_phrase(body, _DAZHONG_POLITICS_BODY_PHRASES):
+                return SourceAdmissionDecision(accepted=False, topic="politics")
+            if self._contains_phrase(body, _DAZHONG_SPORTS_BODY_PHRASES):
+                return SourceAdmissionDecision(accepted=False, topic="sports")
         return SourceAdmissionDecision(accepted=True)
 
     @staticmethod

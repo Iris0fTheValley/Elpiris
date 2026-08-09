@@ -7,10 +7,15 @@ import {FirstReviewPanel} from '@/features/reviews/FirstReviewPanel';
 import {storyFixture} from '@test/fixtures';
 import {renderWithApp} from '@test/render';
 
-const apiMocks = vi.hoisted(() => ({listRoles: vi.fn(), submitFirstReview: vi.fn()}));
+const apiMocks = vi.hoisted(() => ({
+  listRoles: vi.fn(),
+  retranslateStory: vi.fn(),
+  submitFirstReview: vi.fn(),
+}));
 
 vi.mock('@/api/client', () => ({
   listRoles: apiMocks.listRoles,
+  retranslateStory: apiMocks.retranslateStory,
   submitFirstReview: apiMocks.submitFirstReview,
 }));
 
@@ -40,6 +45,31 @@ beforeEach(() => vi.clearAllMocks());
 afterEach(cleanup);
 
 describe('FirstReviewPanel', () => {
+  it('regenerates an unreviewed translation and refreshes the editable fields', async () => {
+    const user = userEvent.setup();
+    const updated = {
+      ...storyFixture,
+      version: 4,
+      translation: {
+        ...storyFixture.translation!,
+        translated_text: 'NASA 已重新生成经过语言校验的中文译文。',
+        summary: '重新生成的中文摘要。',
+      },
+    };
+    apiMocks.listRoles.mockResolvedValue([ttsRole]);
+    apiMocks.retranslateStory.mockResolvedValue(updated);
+    renderWithApp(<FirstReviewPanel story={storyFixture} />);
+
+    await user.click(screen.getByRole('button', {name: '重新翻译原文'}));
+
+    await waitFor(() => expect(apiMocks.retranslateStory).toHaveBeenCalledWith(
+      storyFixture.story_id,
+      {expected_story_version: 3},
+    ));
+    expect(screen.getByLabelText('译文')).toHaveValue(updated.translation.translated_text);
+    expect(screen.getByLabelText('摘要')).toHaveValue(updated.translation.summary);
+  });
+
   it('submits human-corrected key points with an idempotency id', async () => {
     const user = userEvent.setup();
     apiMocks.listRoles.mockResolvedValue([ttsRole]);

@@ -6545,6 +6545,22 @@
         "title": "RetentionItemResult",
         "type": "object"
       },
+      "RetranslateStoryRequest": {
+        "additionalProperties": false,
+        "description": "Optimistic-concurrency command for replacing an unreviewed translation.",
+        "properties": {
+          "expected_story_version": {
+            "minimum": 1.0,
+            "title": "Expected Story Version",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "expected_story_version"
+        ],
+        "title": "RetranslateStoryRequest",
+        "type": "object"
+      },
       "ReuseApprovedVisualRequest": {
         "additionalProperties": false,
         "description": "Bind already verified Commons bytes to another current narration segment.",
@@ -14206,6 +14222,109 @@
           }
         },
         "summary": "Resume Story",
+        "tags": [
+          "stories"
+        ]
+      }
+    },
+    "/api/v1/stories/{story_id}/retranslate": {
+      "post": {
+        "operationId": "retranslateStory",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "story_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Story Id",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RetranslateStoryRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Story"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Requested story was not found."
+          },
+          "409": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "State or version conflict."
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Request validation or source policy error."
+          },
+          "500": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Unexpected internal failure."
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Fetcher, LLM, or TTS provider failure."
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetail"
+                }
+              }
+            },
+            "description": "Required service is not configured."
+          }
+        },
+        "summary": "Retranslate Story",
         "tags": [
           "stories"
         ]

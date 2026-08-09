@@ -3,7 +3,7 @@ from __future__ import annotations
 from pathlib import Path
 
 from god_news.sources.admission import ContentAdmissionPolicy, guardian_query_with_exclusions
-from god_news.sources.models import RawGuardianItem
+from god_news.sources.models import RawDazhongItem, RawGuardianItem
 from god_news.sources.registry import create_default_source_registry
 
 _FIXTURE = RawGuardianItem.model_validate_json(
@@ -64,6 +64,35 @@ def test_admission_does_not_treat_a_country_name_as_politics() -> None:
     )
 
     assert policy.evaluate(item).accepted is True
+
+
+def test_dazhong_mixed_roundup_is_rejected_from_strong_body_markers() -> None:
+    raw = RawDazhongItem.model_validate_json(
+        (Path(__file__).parent / "fixtures" / "sources" / "dazhong.json").read_text(
+            encoding="utf-8"
+        )
+    ).model_copy(
+        update={
+            "title": "今日早晚报",
+            "body": "先看社区互助消息;随后是足球联赛赛况和两岸关系新闻。",
+        }
+    )
+    item = create_default_source_registry().normalize(raw)
+
+    decision = ContentAdmissionPolicy().evaluate(item)
+
+    assert decision.error_code == "excluded_topic_politics"
+
+
+def test_dazhong_benign_news_is_not_rejected_by_body_scan() -> None:
+    raw = RawDazhongItem.model_validate_json(
+        (Path(__file__).parent / "fixtures" / "sources" / "dazhong.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    item = create_default_source_registry().normalize(raw)
+
+    assert ContentAdmissionPolicy().evaluate(item).accepted is True
 
 
 def test_guardian_query_adds_documented_negative_search_terms() -> None:

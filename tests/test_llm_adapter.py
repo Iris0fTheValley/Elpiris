@@ -112,9 +112,9 @@ async def test_local_provider_uses_json_schema_and_retries_invalid_output() -> N
                     content=json.dumps(
                         {
                             "source_language": "en",
-                            "translated_text": "translated",
-                            "summary": "summary",
-                            "key_points": ["point"],
+                            "translated_text": "这是一条真实新闻的中文译文。",
+                            "summary": "新闻摘要。",
+                            "key_points": ["新闻要点。"],
                             "category": "forum",
                             "secondary_categories": [],
                             "candidate_recommendation": True,
@@ -161,6 +161,141 @@ async def test_local_provider_uses_json_schema_and_retries_invalid_output() -> N
     response_format = create.await_args.kwargs["response_format"]
     assert response_format["type"] == "json_schema"
     assert response_format["json_schema"]["strict"] is True
+    retry_prompt = create.await_args_list[1].kwargs["messages"][1]["content"]
+    assert "schema validation errors" in retry_prompt
+    assert "json_invalid" in retry_prompt
+
+
+@pytest.mark.asyncio
+async def test_translation_retries_when_provider_copies_source_instead_of_translating() -> None:
+    source = (
+        "NASA created 18 new awards through its Innovative Advanced Concepts program "
+        "to study early-stage aerospace technology ideas."
+    )
+
+    def completion(translated_text: str):  # type: ignore[no-untyped-def]
+        return SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    finish_reason="stop",
+                    message=SimpleNamespace(
+                        content=json.dumps(
+                            {
+                                "source_language": "en",
+                                "translated_text": translated_text,
+                                "summary": "NASA 资助早期航天技术概念研究。",
+                                "key_points": ["共设立十八项新资助。"],
+                                "category": "kindness",
+                                "secondary_categories": [],
+                                "candidate_recommendation": True,
+                                "classification_confidence": 0.9,
+                                "classification_rationale": "A real NASA research announcement.",
+                                "risk_flags": [],
+                            },
+                            ensure_ascii=False,
+                        )
+                    ),
+                )
+            ]
+        )
+
+    create = AsyncMock(
+        side_effect=[
+            completion(source),
+            completion("NASA 通过创新先进概念计划设立了十八项新资助;用于研究早期航天技术构想。"),
+        ]
+    )
+    generator = OpenAICompatibleTextGenerator(
+        provider=LLMProvider.DEEPSEEK,
+        api_key="test",
+        base_url="https://api.deepseek.com",
+        model="deepseek-v4-flash",
+        timeout_seconds=5,
+        max_retries=0,
+        validation_retries=1,
+        max_output_tokens=1024,
+        temperature=0.1,
+        max_source_characters=1000,
+        max_memory_characters=100,
+        thinking_enabled=False,
+    )
+    await generator._client.close()  # type: ignore[attr-defined]
+    generator._client = SimpleNamespace(  # type: ignore[assignment]
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create)),
+        close=AsyncMock(),
+    )
+
+    result = await generator.translate_and_summarize(
+        story_id=uuid4(),
+        content=source,
+        source_language="en",
+        target_language="zh-CN",
+        memories=[],
+    )
+
+    assert result.translated_text.startswith("NASA 通过")
+    assert create.await_count == 2
+    retry_prompt = create.await_args_list[1].kwargs["messages"][1]["content"]
+    assert "PREVIOUS_OUTPUT_REJECTED" in retry_prompt
+    assert "translated_text copied the source" in retry_prompt
+
+
+@pytest.mark.asyncio
+async def test_translation_fails_closed_after_repeated_wrong_language_output() -> None:
+    payload = json.dumps(
+        {
+            "source_language": "en",
+            "translated_text": "This remains English even though Chinese was requested.",
+            "summary": "中文摘要。",
+            "key_points": ["中文要点。"],
+            "category": "kindness",
+            "secondary_categories": [],
+            "candidate_recommendation": True,
+            "classification_confidence": 0.8,
+            "classification_rationale": "A real news snapshot.",
+            "risk_flags": [],
+        },
+        ensure_ascii=False,
+    )
+    create = AsyncMock(
+        return_value=SimpleNamespace(
+            choices=[
+                SimpleNamespace(
+                    finish_reason="stop",
+                    message=SimpleNamespace(content=payload),
+                )
+            ]
+        )
+    )
+    generator = OpenAICompatibleTextGenerator(
+        provider=LLMProvider.DEEPSEEK,
+        api_key="test",
+        base_url="https://api.deepseek.com",
+        model="deepseek-v4-flash",
+        timeout_seconds=5,
+        max_retries=0,
+        validation_retries=1,
+        max_output_tokens=1024,
+        temperature=0.1,
+        max_source_characters=1000,
+        max_memory_characters=100,
+        thinking_enabled=False,
+    )
+    await generator._client.close()  # type: ignore[attr-defined]
+    generator._client = SimpleNamespace(  # type: ignore[assignment]
+        chat=SimpleNamespace(completions=SimpleNamespace(create=create)),
+        close=AsyncMock(),
+    )
+
+    with pytest.raises(LLMGenerationError, match="structured output"):
+        await generator.translate_and_summarize(
+            story_id=uuid4(),
+            content="NASA announced a new science program.",
+            source_language="en",
+            target_language="zh-CN",
+            memories=[],
+        )
+    assert create.await_count == 2
 
 
 @pytest.mark.asyncio

@@ -17,6 +17,7 @@ from god_news.domain.models import (
     HealthReport,
     IngestRequest,
     ProductionManifest,
+    RetranslateStoryRequest,
     ReviewRecord,
     ScriptReviewSubmission,
     SecondReviewSubmission,
@@ -174,6 +175,20 @@ async def update_story(
 )
 async def archive_story(story_id: UUID, container: ContainerDependency) -> Story:
     return await container.workflow.archive(story_id)
+
+
+@router.post(
+    "/stories/{story_id}/retranslate",
+    response_model=Story,
+    operation_id="retranslateStory",
+    tags=["stories"],
+)
+async def retranslate_story(
+    story_id: UUID,
+    request: RetranslateStoryRequest,
+    container: ContainerDependency,
+) -> Story:
+    return await container.workflow.retranslate(story_id, request)
 
 
 @router.post(

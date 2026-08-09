@@ -46,6 +46,15 @@ async def test_api_drives_the_full_offline_pipeline(stack: Stack) -> None:
             assert story["translation"]["screening"]["category"] == "kindness"
             story_id = story["story_id"]
 
+            retranslated = await client.post(
+                f"/api/v1/stories/{story_id}/retranslate",
+                json={"expected_story_version": story["version"]},
+            )
+            assert retranslated.status_code == 200
+            story = retranslated.json()
+            assert story["status"] == "PENDING_FIRST_REVIEW"
+            assert stack.generator.translation_calls == 2
+
             first = await client.post(
                 f"/api/v1/stories/{story_id}/reviews/first",
                 json={
@@ -129,6 +138,12 @@ async def test_api_drives_the_full_offline_pipeline(stack: Stack) -> None:
                     "operationId"
                 ]
                 == "synthesizeStory"
+            )
+            assert (
+                openapi.json()["paths"]["/api/v1/stories/{story_id}/retranslate"]["post"][
+                    "operationId"
+                ]
+                == "retranslateStory"
             )
             create_schema = openapi.json()["components"]["schemas"]["CreateStoryRequest"]
             assert create_schema["required"] == ["source", "target_language"]

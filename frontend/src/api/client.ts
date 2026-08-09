@@ -12,6 +12,7 @@ import type {
   OperationRun,
   ProblemDetail,
   RenderVideoBatch,
+  RetranslateStoryRequest,
   RetentionCleanupCommand,
   ReviewSourceTranscriptionRequest,
   RoleProfileCreate,
@@ -200,6 +201,15 @@ export async function synthesizeStory(storyId: string, body: SynthesizeStoryRequ
 export async function resumeStory(storyId: string) {
   const result = await api.POST('/api/v1/stories/{story_id}/resume', {
     params: {path: {story_id: storyId}},
+  });
+  if (result.error !== undefined) throwProblem(result.error, result.response);
+  return result.data;
+}
+
+export async function retranslateStory(storyId: string, body: RetranslateStoryRequest) {
+  const result = await api.POST('/api/v1/stories/{story_id}/retranslate', {
+    params: {path: {story_id: storyId}},
+    body,
   });
   if (result.error !== undefined) throwProblem(result.error, result.response);
   return result.data;

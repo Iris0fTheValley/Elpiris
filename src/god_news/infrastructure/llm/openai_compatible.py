@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Literal, TypeVar
 from uuid import UUID
 
@@ -18,7 +18,12 @@ from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from god_news.config import LLMProvider
 from god_news.domain.enums import SceneTransition, SpeechEmotion
-from god_news.domain.language import should_preserve_chinese_source
+from god_news.domain.language import (
+    is_chinese_language,
+    looks_like_chinese_translation,
+    same_language,
+    should_preserve_chinese_source,
+)
 from god_news.domain.models import (
     CaptionVariant,
     EditorialScreening,
@@ -273,7 +278,11 @@ class OpenAICompatibleTextGenerator:
             "one primary category: kindness, cats_dogs, forum, or short_video. Also decide whether "
             "it is a plausible editorial candidate; this is advice only and never bypasses human "
             "review. Report confidence, a concise rationale, secondary categories, and concrete "
-            "risk flags. When the supplied source language identifies Chinese, retain the "
+            "risk flags. translated_text, summary, and every key_points item MUST be written "
+            "in target_language whenever source and target are different languages; copying "
+            "or paraphrasing the source in its original language is invalid. When the supplied "
+            "source language identifies "
+            "Chinese, retain the "
             "Chinese source content in translated_text exactly rather than translating it into "
             "another language; still summarize and classify it. Return exactly one valid JSON "
             "object matching the provided JSON schema, without Markdown."
@@ -283,6 +292,16 @@ class OpenAICompatibleTextGenerator:
             system_prompt=system,
             input_json=prompt.model_dump_json(),
             output_type=_TranslationOutput,
+            output_validator=(
+                None
+                if chinese_source
+                else lambda output: self._validate_translation_output(
+                    output,
+                    source_content=content,
+                    source_language=source_language,
+                    target_language=target_language,
+                )
+            ),
         )
         return TranslationResult(
             source_language=source_language or generated.source_language,
@@ -305,6 +324,32 @@ class OpenAICompatibleTextGenerator:
                 ],
             ),
         )
+
+    @staticmethod
+    def _validate_translation_output(
+        output: _TranslationOutput,
+        *,
+        source_content: str,
+        source_language: str | None,
+        target_language: str,
+    ) -> None:
+        if same_language(source_language, target_language):
+            return
+        normalized_source = " ".join(source_content.split()).casefold()
+        normalized_translation = " ".join(output.translated_text.split()).casefold()
+        if normalized_translation == normalized_source:
+            raise ValueError(
+                f"translated_text copied the source instead of using {target_language}"
+            )
+        if is_chinese_language(target_language):
+            target_texts = [
+                ("translated_text", output.translated_text),
+                ("summary", output.summary),
+                *((f"key_points[{index}]", value) for index, value in enumerate(output.key_points)),
+            ]
+            for field_name, value in target_texts:
+                if not looks_like_chinese_translation(value):
+                    raise ValueError(f"{field_name} must be written in {target_language}")
 
     async def create_script(
         self,
@@ -764,10 +809,12 @@ class OpenAICompatibleTextGenerator:
         system_prompt: str,
         input_json: str,
         output_type: type[OutputT],
+        output_validator: Callable[[OutputT], None] | None = None,
     ) -> OutputT:
         schema = json.dumps(output_type.model_json_schema(), ensure_ascii=False)
         user_prompt = f"INPUT_JSON:\n{input_json}\n\nOUTPUT_JSON_SCHEMA:\n{schema}"
         last_error: Exception | None = None
+        retry_feedback: str | None = None
         for _ in range(self._validation_retries + 1):
             try:
                 extra_body = None
@@ -793,7 +840,14 @@ class OpenAICompatibleTextGenerator:
                     response_format = ResponseFormatJSONObject(type="json_object")
                 messages: list[ChatCompletionMessageParam] = [
                     ChatCompletionSystemMessageParam(role="system", content=system_prompt),
-                    ChatCompletionUserMessageParam(role="user", content=user_prompt),
+                    ChatCompletionUserMessageParam(
+                        role="user",
+                        content=(
+                            user_prompt
+                            if retry_feedback is None
+                            else f"{user_prompt}\n\nPREVIOUS_OUTPUT_REJECTED:\n{retry_feedback}"
+                        ),
+                    ),
                 ]
                 response = await self._client.chat.completions.create(
                     model=self._model,
@@ -811,9 +865,28 @@ class OpenAICompatibleTextGenerator:
                 content = choice.message.content
                 if not content:
                     raise ValueError("provider returned empty content")
-                return output_type.model_validate_json(content)
-            except (ValidationError, ValueError) as exc:
+                output = output_type.model_validate_json(content)
+                if output_validator is not None:
+                    output_validator(output)
+                return output
+            except ValidationError as exc:
                 last_error = exc
+                safe_errors = [
+                    {
+                        "location": ".".join(str(part) for part in error["loc"]),
+                        "type": error["type"],
+                        "message": error["msg"],
+                    }
+                    for error in exc.errors(include_url=False, include_input=False)[:5]
+                ]
+                retry_feedback = (
+                    "Correct these schema validation errors: "
+                    f"{json.dumps(safe_errors, ensure_ascii=False)}"
+                )
+                continue
+            except ValueError as exc:
+                last_error = exc
+                retry_feedback = str(exc)[:300]
                 continue
             except (openai.APITimeoutError, openai.APIConnectionError) as exc:
                 raise LLMGenerationError(

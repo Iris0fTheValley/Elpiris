@@ -637,6 +637,12 @@ class StoryUpdate(DomainModel):
         return self
 
 
+class RetranslateStoryRequest(DomainModel):
+    """Optimistic-concurrency command for replacing an unreviewed translation."""
+
+    expected_story_version: int = Field(ge=1)
+
+
 class ReviewRecord(DomainModel):
     review_id: UUID = Field(default_factory=uuid4)
     story_id: UUID

@@ -19,6 +19,7 @@ from god_news.domain.models import (
     MemoryWrite,
     PipelineFailure,
     ProductionManifest,
+    RetranslateStoryRequest,
     ReviewRecord,
     ScriptDocument,
     ScriptPreferences,
@@ -187,6 +188,52 @@ class StoryWorkflow:
                 expected_version=story.version,
                 transition_reason="story archived",
             )
+
+    async def retranslate(
+        self,
+        story_id: UUID,
+        request: RetranslateStoryRequest,
+    ) -> Story:
+        """Regenerate a translation before first review without changing source evidence."""
+
+        async with self._lock_for(story_id):
+            story = await self._repository.get(story_id)
+            if request.expected_story_version != story.version:
+                raise ConcurrentWriteError(story_id)
+            if story.status is not StoryStatus.PENDING_FIRST_REVIEW:
+                raise InvalidTransitionError(
+                    story_id,
+                    story.status,
+                    StoryStatus.PENDING_FIRST_REVIEW,
+                )
+            with story_log_context(story_id):
+                try:
+                    memories = await self._memory.recall(
+                        f"editorial context for {story.source.title}: {story.original_text[:500]}"
+                    )
+                    translation = await self._generator.translate_and_summarize(
+                        story_id=story.story_id,
+                        content=story.original_text,
+                        source_language=story.source.detected_language,
+                        target_language=story.target_language,
+                        memories=memories,
+                    )
+                    updated = story.model_copy(
+                        update={
+                            "translation": translation,
+                            "last_failure": None,
+                            "updated_at": utc_now(),
+                        }
+                    )
+                    saved = await self._repository.save(
+                        updated,
+                        expected_version=story.version,
+                    )
+                    logger.info("translation regenerated before first review")
+                    return saved
+                except Exception as exc:
+                    await self._store_failure(story, exc)
+                    raise
 
     async def reopen(self, story_id: UUID) -> Story:
         """Return a completed story to the final-review gate for another pass."""
@@ -743,10 +790,19 @@ class StoryWorkflow:
                 "screening": screening,
             }
         )
+        translation_was_corrected = any(
+            value is not None
+            for value in (
+                submission.corrected_translation,
+                submission.corrected_summary,
+                submission.corrected_key_points,
+            )
+        )
         return story.model_copy(
             update={
                 "translation": translation,
                 "preferences": submission.preferences or story.preferences,
+                "last_failure": None if translation_was_corrected else story.last_failure,
             }
         )
 

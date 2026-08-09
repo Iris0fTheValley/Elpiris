@@ -95,8 +95,9 @@ WORKSPACE = Path(__file__).resolve().parents[2]
 
 
 @dataclass(frozen=True, slots=True)
-class DemoStorySpec:
+class RealNewsStorySpec:
     title: str
+    source_url: str
     original_text: str
     spoken_text: str
     caption_text: str
@@ -105,85 +106,111 @@ class DemoStorySpec:
     tone_hz: int
 
 
-DEMO_STORIES: tuple[DemoStorySpec, ...] = (
-    DemoStorySpec(
-        title="Books returned to a mountain library",
-        original_text=(
-            "A self-authored demonstration story about volunteers delivering donated books "
-            "to a small mountain library."
+REAL_NEWS_STORIES: tuple[RealNewsStorySpec, ...] = (
+    RealNewsStorySpec(
+        title="NASA Awards 2026 Innovative Technology Concepts",
+        source_url=(
+            "https://www.nasa.gov/news-release/"
+            "nasa-awards-2026-innovative-technology-concepts/"
         ),
-        spoken_text="山あいの図書館に、町のみんなから新しい本が届けられました。",
-        caption_text="镇上的人们把一批新书送到了山间的小图书馆。",
+        original_text=(
+            "NASA's Innovative Advanced Concepts program created 18 Phase I awards totaling "
+            "$3.2 million to investigate early-stage aerospace technology ideas."
+        ),
+        spoken_text="NASAは、未来の宇宙技術を研究する十八件の新しい構想を支援します。",
+        caption_text="NASA 将资助十八项面向未来的航天技术构想研究。",
         source_captions=(
-            ("Volunteers sort donated books.", "志愿者们整理捐赠图书。"),
-            ("The boxes travel to the mountain library.", "书箱被送往山间图书馆。"),
-            ("Children open a new reading corner.", "孩子们迎来了新的阅读角。"),
+            ("NASA selected 18 Phase I concepts.", "NASA 选中了十八项第一阶段构想。"),
+            ("The awards total $3.2 million.", "本轮资助总额为三百二十万美元。"),
+            ("Each concept receives a nine-month study.", "每项构想将开展为期九个月的研究。"),
         ),
         category=ContentCategory.KINDNESS,
         tone_hz=330,
     ),
-    DemoStorySpec(
-        title="A rescued turtle returns to the sea",
+    RealNewsStorySpec(
+        title="NASA Johnson Interns Shaping the Future of Exploration",
+        source_url=(
+            "https://www.nasa.gov/centers-and-facilities/johnson/"
+            "nasa-johnson-interns-shaping-the-future-of-exploration/"
+        ),
         original_text=(
-            "A self-authored demonstration story about a rehabilitation team returning a "
-            "healthy sea turtle to the ocean."
+            "NASA Johnson Space Center interns are contributing to real engineering, science, "
+            "communications, and human-spaceflight projects while preparing for aerospace careers."
         ),
-        spoken_text="けがを治したウミガメが、見守る人たちの前で海へ帰りました。",
-        caption_text="康复后的海龟在人们的注视下重新回到了大海。",
+        spoken_text="NASAの実習生たちは、有人宇宙飛行を支える実際のプロジェクトに参加しています。",
+        caption_text="NASA 的实习生正在参与支持载人航天的真实项目。",
         source_captions=(
-            ("The rehabilitation team completes its final check.", "救助团队完成最后检查。"),
-            ("A clear path is opened across the sand.", "沙滩上为海龟让出了一条通道。"),
-            ("The turtle reaches the water on its own.", "海龟靠自己的力量回到海中。"),
+            ("Interns work alongside NASA specialists.", "实习生与 NASA 专业人员并肩工作。"),
+            ("They contribute to real-world projects.", "他们为真实工程项目作出贡献。"),
+            (
+                "The experience prepares future aerospace workers.",
+                "这些经历帮助他们成长为未来的航天人才。",
+            ),
         ),
-        category=ContentCategory.CATS_DOGS,
+        category=ContentCategory.KINDNESS,
         tone_hz=392,
     ),
-    DemoStorySpec(
-        title="Students power their classroom with sunlight",
-        original_text=(
-            "A self-authored demonstration story about students and teachers installing a "
-            "small solar system for a classroom."
+    RealNewsStorySpec(
+        title="NASA Assigns Astronaut Deniz Burnham to First Space Station Mission",
+        source_url=(
+            "https://www.nasa.gov/news-release/"
+            "nasa-assigns-astronaut-deniz-burnham-to-first-space-station-mission/"
         ),
-        spoken_text="生徒と先生が力を合わせ、教室に小さな太陽光設備を完成させました。",
-        caption_text="学生和老师一起为教室建成了一套小型太阳能设备。",
+        original_text=(
+            "NASA assigned astronaut Deniz Burnham to her first International Space Station "
+            "mission as an Expedition 76 flight engineer, targeted to launch in March 2027."
+        ),
+        spoken_text="宇宙飛行士デニズ・バーナムが、初めて国際宇宙ステーションへ向かいます。",
+        caption_text="宇航员 Deniz Burnham 将首次前往国际空间站。",
         source_captions=(
-            ("Students measure the roof together.", "学生们一起测量屋顶。"),
-            ("Teachers explain how the panels work.", "老师讲解太阳能板的工作原理。"),
-            ("The classroom lights turn on with stored energy.", "教室用储存的能量点亮了灯。"),
+            ("Burnham will serve as a flight engineer.", "Burnham 将担任飞行工程师。"),
+            ("Launch is targeted for March 2027.", "任务计划于二〇二七年三月发射。"),
+            ("The crew will spend about seven months in orbit.", "机组预计将在轨工作约七个月。"),
         ),
         category=ContentCategory.KINDNESS,
         tone_hz=440,
     ),
-    DemoStorySpec(
-        title="A community fridge stays full",
+    RealNewsStorySpec(
+        title="NASA Astronaut Chris Williams Returns to Earth",
+        source_url=(
+            "https://www.nasa.gov/image-article/"
+            "nasa-astronaut-chris-williams-returns-to-earth/"
+        ),
         original_text=(
-            "A self-authored demonstration story about neighbors keeping a community fridge "
-            "stocked with fresh food."
+            "NASA astronaut Chris Williams returned to Earth after eight months aboard the "
+            "International Space Station, where he supported science and completed two spacewalks."
         ),
-        spoken_text="地域の冷蔵庫には、近所の人たちが毎日少しずつ食べ物を届けています。",
-        caption_text="邻居们每天都会为社区冰箱补上一点新鲜食物。",
+        spoken_text="宇宙飛行士クリス・ウィリアムズが、八か月の任務を終えて地球へ帰還しました。",
+        caption_text="宇航员 Chris Williams 完成八个月任务后返回地球。",
         source_captions=(
-            ("Neighbors label fresh donations.", "邻居们为新鲜捐赠食品贴上标签。"),
-            ("Volunteers check dates and temperatures.", "志愿者检查日期和温度。"),
-            ("Anyone who needs food may take it freely.", "有需要的人都可以自由取用。"),
+            ("Williams spent eight months on the station.", "Williams 在空间站工作了八个月。"),
+            ("He supported scientific investigations.", "他参与了多项科学研究。"),
+            ("He also completed two spacewalks.", "他还完成了两次太空行走。"),
         ),
-        category=ContentCategory.FORUM,
+        category=ContentCategory.KINDNESS,
         tone_hz=494,
     ),
-    DemoStorySpec(
-        title="A lost dog finds its family again",
+    RealNewsStorySpec(
+        title="NASA's Swift Sees 'Wandering' Mega Black Hole Shredding Star",
+        source_url=(
+            "https://science.nasa.gov/missions/swift/"
+            "nasas-swift-sees-wandering-mega-black-hole-shredding-star/"
+        ),
         original_text=(
-            "A self-authored demonstration story about residents helping a lost dog return "
-            "to its family."
+            "NASA's Neil Gehrels Swift Observatory detected a rare tidal disruption event from "
+            "a supermassive black hole unusually far from the center of its galaxy."
         ),
-        spoken_text="迷子になった犬は、町の人たちの連絡で無事に家族のもとへ戻りました。",
-        caption_text="全镇居民接力提供帮助。走失的小狗平安回到了家人身边。",
+        spoken_text="NASAのスウィフト衛星が、銀河の中心から離れた巨大ブラックホールの珍しい現象を捉えました。",
+        caption_text="NASA 的 Swift 卫星捕捉到远离星系中心的巨型黑洞罕见活动。",
         source_captions=(
-            ("A resident shares a clear photo.", "一位居民分享了清晰的照片。"),
-            ("Local shops help spread the notice.", "附近商店一起转发寻主信息。"),
-            ("The family arrives for a quiet reunion.", "家人赶来。小狗与他们温柔重逢。"),
+            ("Swift detected a tidal disruption event.", "Swift 探测到一次潮汐瓦解事件。"),
+            ("The black hole lies far from the galactic center.", "这个黑洞远离所在星系的中心。"),
+            (
+                "The observation gives astronomers a rare new example.",
+                "这次观测为天文学家提供了罕见的新样本。",
+            ),
         ),
-        category=ContentCategory.SHORT_VIDEO,
+        category=ContentCategory.KINDNESS,
         tone_hz=523,
     ),
 )
@@ -522,25 +549,20 @@ async def ensure_role(
 
 def build_story(
     *,
-    spec: DemoStorySpec,
+    spec: RealNewsStorySpec,
     speaker_id: str,
     source_audio: Path,
     index: int,
-    content_instance_id: str,
 ) -> tuple[Story, ProductionManifest]:
-    original_text = (
-        f"{spec.original_text}\n\nE2E fixture instance: {content_instance_id}/{index + 1}."
-    )
-    source_url = (
-        f"https://example.com/god-news-demo/{content_instance_id}/{index + 1}"
-    )
+    original_text = spec.original_text
+    source_url = spec.source_url
     source = SourceSnapshot(
         kind=SourceKind.URL,
         source_uri=source_url,
         final_uri=source_url,
         title=spec.title,
         detected_language="en",
-        fetcher="self-authored-e2e-source",
+        fetcher="real-news-snapshot",
         content_sha256=hashlib.sha256(original_text.encode("utf-8")).hexdigest(),
     )
     segment = ScriptSegment(
@@ -585,7 +607,7 @@ def build_story(
     digest = "0" * 64
     audio = AudioBundle(
         revision=script.revision,
-        provider="self-authored-e2e-evidence",
+        provider="real-news-snapshot-evidence",
         model_identity="fixture-only-not-rendered",
         synthesis=SynthesisMetadata(
             seed=0,
@@ -626,7 +648,7 @@ def build_story(
                 model_candidate_recommendation=True,
                 candidate_recommendation=True,
                 confidence=1.0,
-                rationale="Self-authored, non-political E2E fixture approved for this demo.",
+                rationale="Public NASA news snapshot retained with its canonical source URL.",
             ),
         ),
         script=script,
@@ -708,15 +730,15 @@ async def approve_story_visuals(
             decision=ReviewDecision.APPROVE,
             reviewer_id="e2e-visual-reviewer",
             note=(
-                "Development-only approval of project-owned image and self-authored "
-                "source-page screenshot evidence."
+                "Development-only approval of project-generated visual evidence for a "
+                "real-news source snapshot."
             ),
         ),
     )
 
 
 def timed_source_captions(
-    spec: DemoStorySpec,
+    spec: RealNewsStorySpec,
     duration_ms: int,
 ) -> list[TimedCaptionCue]:
     count = len(spec.source_captions)
@@ -761,7 +783,7 @@ async def build_source_assets(
     async def build_one(
         index: int,
         story: Story,
-        spec: DemoStorySpec,
+        spec: RealNewsStorySpec,
     ) -> SourceVideoRenderAsset:
         path = source_root / f"{index + 1:02d}-{story.story_id}.mp4"
         async with semaphore:
@@ -802,7 +824,7 @@ async def build_source_assets(
     return list(
         await asyncio.gather(
             *[
-                build_one(index, story, DEMO_STORIES[index])
+                build_one(index, story, REAL_NEWS_STORIES[index])
                 for index, story in enumerate(stories)
             ]
         )
@@ -1396,9 +1418,21 @@ async def main() -> None:
     )
     source_commit = git_stdout.decode("ascii", errors="strict").strip()
     run_id = f"{started_at:%Y%m%dT%H%M%SZ}-{uuid4()}"
-    settings: Settings = get_settings()
-    run_root = (settings.output_dir / "e2e" / run_id).resolve()
+    base_settings: Settings = get_settings()
+    run_root = (base_settings.output_dir / "e2e" / run_id).resolve()
     run_root.mkdir(parents=True, exist_ok=False)
+    runtime_root = run_root / "runtime"
+    settings = base_settings.model_copy(
+        update={
+            "database_url": (
+                "sqlite+aiosqlite:///"
+                f"{(runtime_root / 'god-news-e2e.db').resolve().as_posix()}"
+            ),
+            "output_dir": runtime_root / "outputs",
+            "uploaded_video_dir": runtime_root / "uploads" / "videos",
+            "memory_chroma_persist_directory": runtime_root / "chroma",
+        }
+    )
     source_root = run_root / "source-videos"
     render_root = run_root / "renders"
     live2d_root = run_root / "live2d"
@@ -1407,26 +1441,14 @@ async def main() -> None:
     report_path = run_root / "artifact-report.json"
     source_audio = run_root / "source-story-evidence.wav"
     write_evidence_wav(source_audio)
-    image_path = (WORKSPACE / "assets" / "demo-owned" / "library-volunteers.png").resolve(
-        strict=True
-    )
-    screenshot_path = (
-        WORKSPACE / "assets" / "demo-owned" / "community-library-source.png"
-    ).resolve(strict=True)
+    snapshot_root = WORKSPACE / "assets" / "news-snapshots" / "nasa-2026"
+    image_path = (snapshot_root / "niac-awards.png").resolve(strict=True)
     story_screenshots = [
-        screenshot_path,
-        (WORKSPACE / "assets" / "demo-owned" / "turtle-release-source.png").resolve(
-            strict=True
-        ),
-        (
-            WORKSPACE / "assets" / "demo-owned" / "solar-classroom-source.png"
-        ).resolve(strict=True),
-        (
-            WORKSPACE / "assets" / "demo-owned" / "community-fridge-source.png"
-        ).resolve(strict=True),
-        (
-            WORKSPACE / "assets" / "demo-owned" / "lost-dog-reunion-source.png"
-        ).resolve(strict=True),
+        (snapshot_root / "niac-awards.png").resolve(strict=True),
+        (snapshot_root / "johnson-interns.png").resolve(strict=True),
+        (snapshot_root / "deniz-burnham.png").resolve(strict=True),
+        (snapshot_root / "chris-williams.png").resolve(strict=True),
+        (snapshot_root / "swift-black-hole.png").resolve(strict=True),
     ]
 
     ffmpeg = (dsakiko_root / "GPT_SoVITS" / "ffmpeg.exe").resolve(strict=True)
@@ -1446,13 +1468,12 @@ async def main() -> None:
 
         stories: list[Story] = []
         manifests: dict[UUID, ProductionManifest] = {}
-        for index, spec in enumerate(DEMO_STORIES):
+        for index, spec in enumerate(REAL_NEWS_STORIES):
             story, _fixture_manifest = build_story(
                 spec=spec,
                 speaker_id=role.speaker_id,
                 source_audio=source_audio,
                 index=index,
-                content_instance_id=run_id,
             )
             created = await container.repository.create(story)
             approved = await approve_story_visuals(
@@ -1460,8 +1481,8 @@ async def main() -> None:
                 story=created,
                 image_path=image_path,
                 screenshot_path=story_screenshots[index],
-                # Only the library story has an editor-selected photograph.
-                # The other stories use their own reviewed source-page capture.
+                # The first story exercises both editor image and source-page
+                # review using the same rights-documented NASA snapshot.
                 include_editor_image=index == 0,
             )
             stories.append(approved)
@@ -1476,7 +1497,7 @@ async def main() -> None:
             stories=stories[:1],
             duration_seconds=args.source_duration_seconds,
             image_path=image_path,
-            screenshot_path=screenshot_path,
+            screenshot_path=story_screenshots[0],
         )
         if not isinstance(container.generator, OpenAICompatibleTextGenerator):
             raise RuntimeError("A configured OpenAI-compatible LLM is required.")
@@ -1549,7 +1570,7 @@ async def main() -> None:
                 expected_batch_version=batch.version,
                 decision=NarrationReviewDecision.APPROVE,
                 reviewer_id="e2e-development-reviewer",
-                note="Development-only automatic approval of self-authored fixture content.",
+                note="Development-only automatic approval of sourced real-news snapshots.",
             ),
         )
         batch = await service.synthesize_narration(

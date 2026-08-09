@@ -3,7 +3,7 @@ import {CheckCircle2, RotateCcw} from 'lucide-react';
 import {type ChangeEvent, useRef, useState} from 'react';
 import {useForm, useWatch} from 'react-hook-form';
 
-import {listRoles, submitFirstReview} from '../../api/client';
+import {listRoles, retranslateStory, submitFirstReview} from '../../api/client';
 import {queryKeys} from '../../api/queryKeys';
 import type {FirstReviewSubmission, SpeechEmotion, Story} from '../../api/types';
 import {ApiErrorNotice} from '../../components/ApiErrorNotice';
@@ -38,6 +38,24 @@ function resolveEmotion(value: string): SpeechEmotion | null {
     : null;
 }
 
+function reviewDefaults(story: Story): ReviewForm {
+  return {
+    reviewerId: 'local-editor',
+    translation: story.translation?.translated_text ?? '',
+    summary: story.translation?.summary ?? '',
+    keyPoints: story.translation?.key_points?.join('\n') ?? '',
+    category: story.translation?.screening.category ?? 'kindness',
+    candidateRecommendation: story.translation?.screening.candidate_recommendation ?? false,
+    style: story.preferences.style,
+    duration: story.preferences.target_duration_seconds,
+    speakerId: story.preferences.speaker_id,
+    spokenLanguage: story.preferences.spoken_language ?? '',
+    captionLanguage: story.preferences.caption_language ?? story.target_language,
+    speed: story.preferences.speed,
+    note: '',
+  };
+}
+
 export function FirstReviewPanel({story}: FirstReviewPanelProps) {
   const storyId = story.story_id;
   const queryClient = useQueryClient();
@@ -50,22 +68,8 @@ export function FirstReviewPanel({story}: FirstReviewPanelProps) {
     queryKey: queryKeys.roles(true),
     queryFn: () => listRoles(true),
   });
-  const {register, handleSubmit, setValue, control, formState} = useForm<ReviewForm>({
-    defaultValues: {
-      reviewerId: 'local-editor',
-      translation: story.translation?.translated_text ?? '',
-      summary: story.translation?.summary ?? '',
-      keyPoints: story.translation?.key_points?.join('\n') ?? '',
-      category: story.translation?.screening.category ?? 'kindness',
-      candidateRecommendation: story.translation?.screening.candidate_recommendation ?? false,
-      style: story.preferences.style,
-      duration: story.preferences.target_duration_seconds,
-      speakerId: story.preferences.speaker_id,
-      spokenLanguage: story.preferences.spoken_language ?? '',
-      captionLanguage: story.preferences.caption_language ?? story.target_language,
-      speed: story.preferences.speed,
-      note: '',
-    },
+  const {register, handleSubmit, setValue, reset, control, formState} = useForm<ReviewForm>({
+    defaultValues: reviewDefaults(story),
   });
   const selectedSpeakerId = useWatch({control, name: 'speakerId'});
   const eligibleRoles = (rolesQuery.data ?? []).filter(
@@ -131,6 +135,18 @@ export function FirstReviewPanel({story}: FirstReviewPanelProps) {
       ]);
     },
   });
+  const retranslateMutation = useMutation({
+    mutationFn: () => {
+      if (storyId === undefined) throw new Error('Story ID is missing.');
+      return retranslateStory(storyId, {expected_story_version: story.version ?? 1});
+    },
+    onSuccess: async (updated) => {
+      if (storyId === undefined) return;
+      reset(reviewDefaults(updated));
+      queryClient.setQueryData(queryKeys.story(storyId), updated);
+      await queryClient.invalidateQueries({queryKey: queryKeys.stories()});
+    },
+  });
   const requestDecision = (decision: 'approve' | 'request_changes') => {
     void handleSubmit((values) => {
       setPendingSubmission({decision, values: {...values}});
@@ -151,6 +167,15 @@ export function FirstReviewPanel({story}: FirstReviewPanelProps) {
       <p className="eyebrow">FIRST REVIEW · v{String(story.version ?? 1)}</p>
       <h2>人工初审</h2>
       <p className="review-help">确认事实、译文和关键点。在这里设定脚本参数；批准后只生成口播文本，不会启动本地 TTS。</p>
+      <button
+        className="button secondary"
+        type="button"
+        disabled={mutation.isPending || retranslateMutation.isPending}
+        onClick={() => retranslateMutation.mutate()}
+      >
+        <RotateCcw size={17} aria-hidden="true" />
+        {retranslateMutation.isPending ? '正在重新翻译…' : '重新翻译原文'}
+      </button>
       <label className="field">
         <span>审核人</span>
         <input
@@ -326,11 +351,14 @@ export function FirstReviewPanel({story}: FirstReviewPanelProps) {
       </label>
       {rolesQuery.error === null ? null : <ApiErrorNotice error={rolesQuery.error} />}
       {mutation.error === null ? null : <ApiErrorNotice error={mutation.error} />}
+      {retranslateMutation.error === null ? null : (
+        <ApiErrorNotice error={retranslateMutation.error} />
+      )}
       <div className="review-actions">
         <button
           className="button secondary"
           type="button"
-          disabled={mutation.isPending || formState.isSubmitting}
+          disabled={mutation.isPending || retranslateMutation.isPending || formState.isSubmitting}
           onClick={() => requestDecision('request_changes')}
         >
           <RotateCcw size={17} aria-hidden="true" />
@@ -339,7 +367,12 @@ export function FirstReviewPanel({story}: FirstReviewPanelProps) {
         <button
           className="button primary"
           type="button"
-          disabled={mutation.isPending || formState.isSubmitting || !canApprove}
+          disabled={
+            mutation.isPending
+            || retranslateMutation.isPending
+            || formState.isSubmitting
+            || !canApprove
+          }
           onClick={() => requestDecision('approve')}
         >
           <CheckCircle2 size={18} aria-hidden="true" />

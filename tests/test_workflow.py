@@ -10,6 +10,8 @@ from god_news.domain.fsm import transition_story
 from god_news.domain.models import (
     FirstReviewSubmission,
     IngestRequest,
+    PipelineFailure,
+    RetranslateStoryRequest,
     ScriptReviewSubmission,
     SecondReviewSubmission,
     SynthesizeStoryRequest,
@@ -17,6 +19,7 @@ from god_news.domain.models import (
 )
 from god_news.errors import (
     ArtifactNotReadyError,
+    ConcurrentWriteError,
     IdempotencyConflictError,
     InvalidTransitionError,
     StoryInvariantError,
@@ -132,6 +135,18 @@ async def test_complete_review_gated_pipeline(stack: Stack) -> None:
 @pytest.mark.asyncio
 async def test_first_review_changes_do_not_start_expensive_work(stack: Stack) -> None:
     story = await stack.workflow.ingest(ingest_request())
+    story = await stack.repository.save(
+        story.model_copy(
+            update={
+                "last_failure": PipelineFailure(
+                    code="llm_generation_failed",
+                    message="The previous automatic translation was invalid.",
+                    retryable=True,
+                )
+            }
+        ),
+        expected_version=story.version,
+    )
     story = await stack.workflow.submit_first_review(
         story.story_id,
         FirstReviewSubmission(
@@ -152,6 +167,7 @@ async def test_first_review_changes_do_not_start_expensive_work(stack: Stack) ->
     assert story.translation.screening.model_category is ContentCategory.KINDNESS
     assert story.translation.screening.category is ContentCategory.FORUM
     assert story.translation.screening.candidate_recommendation is False
+    assert story.last_failure is None
     assert stack.synthesizer.calls == 0
     assert stack.generator.script_calls == 0
     review = (await stack.workflow.reviews(story.story_id))[0]
@@ -162,6 +178,30 @@ async def test_first_review_changes_do_not_start_expensive_work(stack: Stack) ->
     assert metrics.reviewed_count == 1
     assert metrics.accepted_count == 0
     assert metrics.accuracy == 0.0
+
+
+@pytest.mark.asyncio
+async def test_unreviewed_translation_can_be_regenerated_with_version_guard(stack: Stack) -> None:
+    story = await stack.workflow.ingest(ingest_request())
+    original_version = story.version
+
+    regenerated = await stack.workflow.retranslate(
+        story.story_id,
+        RetranslateStoryRequest(expected_story_version=story.version),
+    )
+
+    assert regenerated.status is StoryStatus.PENDING_FIRST_REVIEW
+    assert regenerated.version == original_version + 1
+    assert regenerated.source == story.source
+    assert regenerated.original_text == story.original_text
+    assert regenerated.translation is not None
+    assert stack.generator.translation_calls == 2
+
+    with pytest.raises(ConcurrentWriteError):
+        await stack.workflow.retranslate(
+            story.story_id,
+            RetranslateStoryRequest(expected_story_version=story.version),
+        )
 
 
 @pytest.mark.asyncio

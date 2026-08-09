@@ -3,6 +3,7 @@ import type {components} from './generated';
 export type Story = components['schemas']['Story'];
 export type StoryStatus = components['schemas']['StoryStatus'];
 export type StoryUpdate = components['schemas']['StoryUpdate'];
+export type RetranslateStoryRequest = components['schemas']['RetranslateStoryRequest'];
 export type CreateStoryRequest = components['schemas']['CreateStoryRequest'];
 export type FirstReviewSubmission = components['schemas']['FirstReviewSubmission'];
 export type ScriptReviewSubmission = components['schemas']['ScriptReviewSubmission'];
