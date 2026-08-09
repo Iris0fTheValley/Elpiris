@@ -86,10 +86,19 @@ def create_app(
         request: Request,
         exc: RequestValidationError,
     ) -> JSONResponse:
-        del request, exc
+        del request
+        issues = []
+        for error in exc.errors()[:5]:
+            location = ".".join(str(part) for part in error.get("loc", ())) or "request"
+            error_type = str(error.get("type", "invalid"))
+            issues.append(f"{location} [{error_type}]")
+        issue_text = "; ".join(issues) or "request [invalid]"
         problem = ProblemDetail(
             code="request_validation_failed",
-            message="Request did not match the required schema.",
+            message=(
+                f"请求不符合当前接口契约: {issue_text}。"
+                "如果刚更新过代码, 请重启后端后重试。"
+            ),
             trace_id=trace_id_var.get(),
         )
         return JSONResponse(status_code=422, content=problem.model_dump(mode="json"))

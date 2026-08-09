@@ -191,5 +191,8 @@ async def test_api_returns_stable_validation_problem(stack: Stack) -> None:
             )
     assert response.status_code == 422
     assert response.json()["code"] == "request_validation_failed"
+    assert "body.source" in response.json()["message"]
+    assert "重启后端" in response.json()["message"]
     assert obsolete_preferences.status_code == 422
     assert obsolete_preferences.json()["code"] == "request_validation_failed"
+    assert "body.style [extra_forbidden]" in obsolete_preferences.json()["message"]
