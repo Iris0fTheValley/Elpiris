@@ -57,15 +57,14 @@ function EvidenceText({
   emptyText: string;
 }) {
   const content = text?.trim() || emptyText;
-  const long = content.length > 1_200;
   return (
-    <details className="evidence-copy" open={!long}>
-      <summary>
+    <section className="evidence-copy" aria-label={title}>
+      <div className="evidence-copy-header">
         <strong>{title}</strong>
         <span className="metadata">{content.length.toLocaleString('zh-CN')} 字符</span>
-      </summary>
+      </div>
       <p className="long-copy">{content}</p>
-    </details>
+    </section>
   );
 }
 
@@ -146,7 +145,7 @@ export function StoryWorkbenchPage() {
     );
   }
   const story = storyQuery.data;
-  const displayTitle = story.title ?? story.source.title;
+  const displayTitle = story.title ?? story.translation?.translated_title ?? story.source.title;
   const serverScript = story.script ?? null;
   const scriptDraft = (
     scriptEdit?.storyId === storyId
@@ -173,6 +172,11 @@ export function StoryWorkbenchPage() {
         <div>
           <p className="eyebrow">{story.source.fetcher} · {STATUS_LABELS[story.status]}</p>
           <h1>{displayTitle}</h1>
+          {displayTitle === story.source.title ? null : (
+            <p className="source-title" lang={story.source.detected_language ?? undefined}>
+              原标题：{story.source.title}
+            </p>
+          )}
           <div className="header-meta metadata">
             <span><Hash size={14} aria-hidden="true" /> {story.story_id}</span>
             <span>trace {story.trace_id}</span>

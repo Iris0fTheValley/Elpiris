@@ -20,7 +20,7 @@ from god_news.domain.enums import (
     StoryStatus,
 )
 from god_news.domain.fsm import validate_story_invariants, validate_transition_evidence
-from god_news.domain.language import should_preserve_chinese_source
+from god_news.domain.language import same_language, should_preserve_chinese_source
 from god_news.domain.models import (
     AudioBundle,
     AudioClip,
@@ -284,6 +284,7 @@ class DeterministicTextGenerator:
         self,
         *,
         story_id: UUID,
+        source_title: str,
         content: str,
         source_language: str | None,
         target_language: str,
@@ -305,6 +306,11 @@ class DeterministicTextGenerator:
         return TranslationResult(
             source_language=source_language or ("zh" if chinese_source else "und"),
             target_language=target_language,
+            translated_title=(
+                source_title
+                if chinese_source or same_language(source_language, target_language)
+                else f"[offline translation] {source_title}"
+            ),
             translated_text=content if chinese_source else f"[offline translation] {normalized}",
             summary=normalized[:240],
             key_points=[normalized[:120]],

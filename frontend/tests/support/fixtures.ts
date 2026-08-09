@@ -29,6 +29,7 @@ export const storyFixture = {
   translation: {
     source_language: 'zh-CN',
     target_language: 'zh-CN',
+    translated_title: '陌生人把走失的小狗送回了家',
     translated_text: '一位陌生人帮助走失的小狗回家。',
     summary: '雨天里的善意接力。',
     key_points: ['陪伴寻找', '安全回家'],

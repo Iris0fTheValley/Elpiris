@@ -28,6 +28,15 @@ from god_news.infrastructure.llm.openai_compatible import (
 from .test_fsm import make_artifacts
 
 
+def test_legacy_translation_without_title_remains_loadable() -> None:
+    translation, _, _ = make_artifacts()
+    legacy = translation.model_dump(mode="json", exclude={"translated_title"})
+
+    restored = TranslationResult.model_validate(legacy)
+
+    assert restored.translated_title is None
+
+
 @pytest.mark.asyncio
 async def test_deepseek_payload_disables_thinking_and_validates_json() -> None:
     completion = SimpleNamespace(
@@ -38,6 +47,7 @@ async def test_deepseek_payload_disables_thinking_and_validates_json() -> None:
                     content=json.dumps(
                         {
                             "source_language": "en",
+                            "translated_title": "善意新闻标题",
                             "translated_text": "译文",
                             "summary": "摘要",
                             "key_points": ["要点"],
@@ -82,13 +92,17 @@ async def test_deepseek_payload_disables_thinking_and_validates_json() -> None:
     await generator.healthcheck()
     result = await generator.translate_and_summarize(
         story_id=uuid4(),
+        source_title="Kindness headline",
         content="source",
         source_language="en",
         target_language="zh-CN",
         memories=[],
     )
     assert result.summary == "摘要"
+    assert result.translated_title == "善意新闻标题"
     kwargs = create.await_args.kwargs
+    prompt = json.loads(kwargs["messages"][1]["content"].splitlines()[1])
+    assert prompt["source_title"] == "Kindness headline"
     assert kwargs["extra_body"]["thinking"] == {"type": "disabled"}
     assert kwargs["response_format"] == {"type": "json_object"}
     list_models.assert_awaited_once()
@@ -112,6 +126,7 @@ async def test_local_provider_uses_json_schema_and_retries_invalid_output() -> N
                     content=json.dumps(
                         {
                             "source_language": "en",
+                            "translated_title": "论坛善意故事",
                             "translated_text": "这是一条真实新闻的中文译文。",
                             "summary": "新闻摘要。",
                             "key_points": ["新闻要点。"],
@@ -150,6 +165,7 @@ async def test_local_provider_uses_json_schema_and_retries_invalid_output() -> N
     generator._client = fake_client  # type: ignore[assignment]
     result = await generator.translate_and_summarize(
         story_id=uuid4(),
+        source_title="Forum kindness story",
         content="source",
         source_language="en",
         target_language="zh-CN",
@@ -182,6 +198,7 @@ async def test_translation_retries_when_provider_copies_source_instead_of_transl
                         content=json.dumps(
                             {
                                 "source_language": "en",
+                                "translated_title": "亚利桑那少年帮助迷路老人",
                                 "translated_text": translated_text,
                                 "summary": "少年帮助一名在酷暑中迷路的失智老人获救。",
                                 "key_points": ["他陪伴老人直到救援人员抵达。"],
@@ -229,6 +246,7 @@ async def test_translation_retries_when_provider_copies_source_instead_of_transl
 
     result = await generator.translate_and_summarize(
         story_id=uuid4(),
+        source_title="Arizona teen helps a lost elder",
         content=source,
         source_language="en",
         target_language="zh-CN",
@@ -247,6 +265,7 @@ async def test_translation_fails_closed_after_repeated_wrong_language_output() -
     payload = json.dumps(
         {
             "source_language": "en",
+            "translated_title": "This title remains English.",
             "translated_text": "This remains English even though Chinese was requested.",
             "summary": "中文摘要。",
             "key_points": ["中文要点。"],
@@ -292,6 +311,7 @@ async def test_translation_fails_closed_after_repeated_wrong_language_output() -
     with pytest.raises(LLMGenerationError, match="structured output"):
         await generator.translate_and_summarize(
             story_id=uuid4(),
+            source_title="Guardian community rescue",
             content="The Guardian published a verified community rescue report.",
             source_language="en",
             target_language="zh-CN",
@@ -320,6 +340,7 @@ async def test_source_limit_fails_explicitly_instead_of_truncating() -> None:
         with pytest.raises(LLMGenerationError, match="input limit") as captured:
             await generator.translate_and_summarize(
                 story_id=uuid4(),
+                source_title="Input limit headline",
                 content="eleven chars",
                 source_language="en",
                 target_language="zh-CN",
@@ -356,6 +377,7 @@ async def test_chinese_source_bypasses_translation_but_keeps_llm_summary_and_scr
                     content=json.dumps(
                         {
                             "source_language": "zh",
+                            "translated_title": "LLM translated title",
                             "translated_text": "LLM translated text",
                             "summary": "LLM summary remains available.",
                             "key_points": ["LLM point"],
@@ -395,6 +417,7 @@ async def test_chinese_source_bypasses_translation_but_keeps_llm_summary_and_scr
 
     result = await generator.translate_and_summarize(
         story_id=uuid4(),
+        source_title="中文来源标题",
         content=content,
         source_language=source_language,
         target_language="en",
@@ -402,6 +425,7 @@ async def test_chinese_source_bypasses_translation_but_keeps_llm_summary_and_scr
     )
 
     assert result.translated_text == expected_translated_text
+    assert result.translated_title == "中文来源标题"
     assert result.summary == "LLM summary remains available."
     assert result.screening.category is ContentCategory.SHORT_VIDEO
 

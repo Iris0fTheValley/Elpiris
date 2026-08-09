@@ -56,6 +56,7 @@ export function StoryListPage() {
     return [
       story.title,
       story.source.title,
+      story.translation?.translated_title,
       story.source.source_uri,
       story.provenance?.source,
       story.translation?.summary,

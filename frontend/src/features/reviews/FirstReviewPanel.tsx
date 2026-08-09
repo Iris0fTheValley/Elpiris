@@ -14,6 +14,7 @@ import {SPOKEN_LANGUAGE_OPTIONS} from '../../components/spokenLanguages';
 
 interface ReviewForm {
   reviewerId: string;
+  title: string;
   translation: string;
   summary: string;
   keyPoints: string;
@@ -41,6 +42,7 @@ function resolveEmotion(value: string): SpeechEmotion | null {
 function reviewDefaults(story: Story): ReviewForm {
   return {
     reviewerId: 'local-editor',
+    title: story.translation?.translated_title ?? story.title ?? story.source.title,
     translation: story.translation?.translated_text ?? '',
     summary: story.translation?.summary ?? '',
     keyPoints: story.translation?.key_points?.join('\n') ?? '',
@@ -102,6 +104,7 @@ export function FirstReviewPanel({story}: FirstReviewPanelProps) {
         decision,
         reviewer_id: values.reviewerId,
         note: values.note || null,
+        corrected_title: values.title,
         corrected_translation: values.translation,
         corrected_summary: values.summary,
         corrected_key_points: values.keyPoints
@@ -188,6 +191,20 @@ export function FirstReviewPanel({story}: FirstReviewPanelProps) {
         />
         {formState.errors.reviewerId?.message === undefined ? null : (
           <small role="alert">{formState.errors.reviewerId.message}</small>
+        )}
+      </label>
+      <label className="field">
+        <span>译文标题</span>
+        <input
+          className="input"
+          aria-invalid={formState.errors.title !== undefined}
+          {...register('title', {
+            required: '请输入译文标题。',
+            validate: (value) => value.trim() !== '' || '请输入译文标题。',
+          })}
+        />
+        {formState.errors.title?.message === undefined ? null : (
+          <small role="alert">{formState.errors.title.message}</small>
         )}
       </label>
       <label className="field">

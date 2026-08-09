@@ -1975,6 +1975,8 @@ export interface components {
             corrected_key_points?: string[] | null;
             /** Corrected Summary */
             corrected_summary?: string | null;
+            /** Corrected Title */
+            corrected_title?: string | null;
             /** Corrected Translation */
             corrected_translation?: string | null;
             decision: components["schemas"]["ReviewDecision"];
@@ -5114,6 +5116,8 @@ export interface components {
             target_language: string;
             /** Translated Text */
             translated_text: string;
+            /** Translated Title */
+            translated_title?: string | null;
         };
         /**
          * TriggerOrigin

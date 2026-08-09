@@ -59,6 +59,7 @@ describe('StoryListPage', () => {
         },
         translation: {
           ...storyFixture.translation,
+          translated_title: '社区图书馆重新开放',
           summary: '志愿者送来了新的图书。',
         },
       },

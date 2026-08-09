@@ -1389,6 +1389,14 @@ time {
   letter-spacing: -0.045em;
 }
 
+.workbench-header .source-title {
+  max-width: 80ch;
+  margin: -4px 0 12px;
+  color: var(--ink-muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+
 .header-meta {
   display: flex;
   flex-wrap: wrap;
@@ -1513,27 +1521,26 @@ time {
   margin-top: 20px;
 }
 
-.evidence-copy summary {
+.evidence-copy-header {
   display: flex;
   min-height: 44px;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
   padding: 9px 12px;
-  list-style-position: inside;
-}
-
-.evidence-copy summary strong {
-  font-size: 13px;
-}
-
-.evidence-copy[open] summary {
   border-bottom: 1px solid var(--rule);
 }
 
+.evidence-copy-header strong {
+  font-size: 13px;
+}
+
 .evidence-copy .long-copy {
+  max-height: 520px;
+  overflow: auto;
   margin: 0;
   padding: 12px;
+  white-space: pre-wrap;
 }
 
 .source-media-list,

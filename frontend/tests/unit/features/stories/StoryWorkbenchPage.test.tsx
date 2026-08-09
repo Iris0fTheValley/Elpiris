@@ -52,12 +52,39 @@ describe('StoryWorkbenchPage', () => {
       [`/stories/${doneStory.story_id}`],
     );
 
-    await screen.findByRole('heading', {name: doneStory.source.title});
+    await screen.findByRole('heading', {name: doneStory.translation?.translated_title ?? doneStory.source.title});
     await user.click(screen.getByRole('button', {name: '归档故事'}));
     await user.click(screen.getByRole('button', {name: '确认归档'}));
 
     await waitFor(() => expect(apiMocks.deleteStory).toHaveBeenCalled());
     expect(apiMocks.deleteStory.mock.calls[0]?.[0]).toBe(doneStory.story_id);
     expect(await screen.findByText('已导航到队列')).toBeVisible();
+  });
+
+  it('keeps long original evidence visible and shows both translated and source titles', async () => {
+    const longOriginal = `原始证据 ${'正文内容。'.repeat(400)}`;
+    const translatedStory: Story = {
+      ...doneStory,
+      original_text: longOriginal,
+      source: {...doneStory.source, title: 'Original source headline', detected_language: 'en'},
+      title: '翻译后的新闻标题',
+      translation: {
+        ...doneStory.translation!,
+        translated_title: '翻译后的新闻标题',
+      },
+    };
+    apiMocks.getStory.mockResolvedValue(translatedStory);
+
+    renderWithApp(
+      <Routes>
+        <Route path="/stories/:storyId" element={<StoryWorkbenchPage />} />
+      </Routes>,
+      [`/stories/${translatedStory.story_id}`],
+    );
+
+    expect(await screen.findByRole('heading', {name: '翻译后的新闻标题'})).toBeVisible();
+    expect(screen.getByText('原标题：Original source headline')).toBeVisible();
+    expect(screen.getByLabelText('原文')).toBeVisible();
+    expect(screen.getByText(longOriginal)).toBeVisible();
   });
 });

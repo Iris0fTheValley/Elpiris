@@ -73,6 +73,10 @@ async def _approve_script_review(stack: Stack, story_id, version: int):  # type:
 async def test_complete_review_gated_pipeline(stack: Stack) -> None:
     story = await stack.workflow.ingest(ingest_request())
     assert story.status is StoryStatus.PENDING_FIRST_REVIEW
+    assert story.source.title == "International fixture"
+    assert story.translation is not None
+    assert story.translation.translated_title == "[offline translation] International fixture"
+    assert story.title == story.translation.translated_title
     assert stack.synthesizer.calls == 0
     assert stack.generator.script_calls == 0
     assert stack.memory.writes == []
@@ -154,6 +158,7 @@ async def test_first_review_changes_do_not_start_expensive_work(stack: Stack) ->
             decision=ReviewDecision.REQUEST_CHANGES,
             reviewer_id="editor-1",
             note="Use a more precise summary.",
+            corrected_title="城市通过可再生能源试点",
             corrected_summary="The council approved a twelve-month renewable energy pilot.",
             corrected_key_points=["Twelve-month pilot", "Monthly results"],
             corrected_category=ContentCategory.FORUM,
@@ -162,6 +167,8 @@ async def test_first_review_changes_do_not_start_expensive_work(stack: Stack) ->
     )
     assert story.status is StoryStatus.PENDING_FIRST_REVIEW
     assert story.translation is not None
+    assert story.title == "城市通过可再生能源试点"
+    assert story.translation.translated_title == "城市通过可再生能源试点"
     assert story.translation.summary.startswith("The council approved")
     assert story.translation.key_points == ["Twelve-month pilot", "Monthly results"]
     assert story.translation.screening.model_category is ContentCategory.KINDNESS
@@ -255,6 +262,7 @@ async def test_deterministic_generator_matches_chinese_translation_contract(
 ) -> None:
     result = await stack.generator.translate_and_summarize(
         story_id=uuid4(),
+        source_title="语言契约标题",
         content=content,
         source_language=source_language,
         target_language="en",

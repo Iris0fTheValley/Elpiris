@@ -190,6 +190,9 @@ class EditorialScreening(DomainModel):
 class TranslationResult(DomainModel):
     source_language: NonBlankStr
     target_language: NonBlankStr
+    # Optional for backward-compatible loading of stories created before title
+    # translation became part of the structured LLM contract.
+    translated_title: NonBlankStr | None = None
     # Chinese source text may deliberately bypass translation.  Preserve the
     # already-captured source bytes exactly instead of stripping editorially
     # meaningful leading/trailing whitespace a second time.
@@ -677,6 +680,7 @@ class FirstReviewSubmission(DomainModel):
     decision: ReviewDecision
     reviewer_id: NonBlankStr
     note: str | None = None
+    corrected_title: NonBlankStr | None = None
     corrected_translation: str | None = None
     corrected_summary: str | None = None
     corrected_key_points: list[NonBlankStr] | None = Field(default=None, max_length=20)
@@ -690,6 +694,7 @@ class FirstReviewSubmission(DomainModel):
             any(
                 (
                     self.note,
+                    self.corrected_title,
                     self.corrected_translation,
                     self.corrected_summary,
                     self.corrected_key_points,

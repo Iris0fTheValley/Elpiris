@@ -40,6 +40,7 @@ class TextGenerator(Protocol):
         self,
         *,
         story_id: UUID,
+        source_title: str,
         content: str,
         source_language: str | None,
         target_language: str,

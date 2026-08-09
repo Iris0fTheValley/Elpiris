@@ -52,6 +52,7 @@ describe('FirstReviewPanel', () => {
       version: 4,
       translation: {
         ...storyFixture.translation!,
+        translated_title: '重新生成的中文标题',
         translated_text: '《卫报》新闻已重新生成经过语言校验的中文译文。',
         summary: '重新生成的中文摘要。',
       },
@@ -67,6 +68,7 @@ describe('FirstReviewPanel', () => {
       {expected_story_version: 3},
     ));
     expect(screen.getByLabelText('译文')).toHaveValue(updated.translation.translated_text);
+    expect(screen.getByLabelText('译文标题')).toHaveValue(updated.translation.translated_title);
     expect(screen.getByLabelText('摘要')).toHaveValue(updated.translation.summary);
   });
 
@@ -98,6 +100,7 @@ describe('FirstReviewPanel', () => {
     expect(payload).toMatchObject({
       decision: 'approve',
       expected_story_version: 3,
+      corrected_title: storyFixture.translation?.translated_title,
       corrected_key_points: ['核对原始证据', '主人已确认接回'],
     });
     expect(payload.preferences).toMatchObject({
@@ -172,6 +175,7 @@ describe('FirstReviewPanel', () => {
     expect(apiMocks.submitFirstReview.mock.calls[0]?.[1]).toMatchObject({
       decision: 'request_changes',
       reviewer_id: 'local-editor',
+      corrected_title: storyFixture.translation?.translated_title,
       corrected_translation: storyFixture.translation?.translated_text,
       corrected_summary: storyFixture.translation?.summary,
     });

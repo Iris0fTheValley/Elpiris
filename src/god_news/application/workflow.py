@@ -213,6 +213,7 @@ class StoryWorkflow:
                     )
                     translation = await self._generator.translate_and_summarize(
                         story_id=story.story_id,
+                        source_title=story.source.title,
                         content=story.original_text,
                         source_language=story.source.detected_language,
                         target_language=story.target_language,
@@ -220,6 +221,7 @@ class StoryWorkflow:
                     )
                     updated = story.model_copy(
                         update={
+                            "title": translation.translated_title or story.title,
                             "translation": translation,
                             "last_failure": None,
                             "updated_at": utc_now(),
@@ -633,13 +635,16 @@ class StoryWorkflow:
             )
             translation = await self._generator.translate_and_summarize(
                 story_id=story.story_id,
+                source_title=story.source.title,
                 content=story.original_text,
                 source_language=story.source.detected_language,
                 target_language=story.target_language,
                 memories=memories,
             )
             translated = transition_story(
-                story,
+                story.model_copy(
+                    update={"title": translation.translated_title or story.title}
+                ),
                 StoryStatus.TRANSLATED,
                 translation=translation,
             )
@@ -778,6 +783,9 @@ class StoryWorkflow:
         )
         translation: TranslationResult = story.translation.model_copy(
             update={
+                "translated_title": (
+                    submission.corrected_title or story.translation.translated_title
+                ),
                 "translated_text": (
                     submission.corrected_translation or story.translation.translated_text
                 ),
@@ -794,12 +802,14 @@ class StoryWorkflow:
             value is not None
             for value in (
                 submission.corrected_translation,
+                submission.corrected_title,
                 submission.corrected_summary,
                 submission.corrected_key_points,
             )
         )
         return story.model_copy(
             update={
+                "title": submission.corrected_title or story.title,
                 "translation": translation,
                 "preferences": submission.preferences or story.preferences,
                 "last_failure": None if translation_was_corrected else story.last_failure,

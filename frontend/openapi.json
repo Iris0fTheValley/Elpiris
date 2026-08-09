@@ -1833,6 +1833,18 @@
             ],
             "title": "Corrected Summary"
           },
+          "corrected_title": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Corrected Title"
+          },
           "corrected_translation": {
             "anyOf": [
               {
@@ -10302,6 +10314,18 @@
             "minLength": 1,
             "title": "Translated Text",
             "type": "string"
+          },
+          "translated_title": {
+            "anyOf": [
+              {
+                "minLength": 1,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Translated Title"
           }
         },
         "required": [

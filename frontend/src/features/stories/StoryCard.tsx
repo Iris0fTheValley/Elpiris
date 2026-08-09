@@ -23,7 +23,7 @@ function formatDate(value?: string): string {
 
 export function StoryCard({story, onDeleteRequest}: StoryCardProps) {
   const storyId = story.story_id;
-  const displayTitle = story.title ?? story.source.title;
+  const displayTitle = story.title ?? story.translation?.translated_title ?? story.source.title;
   const summary = story.translation?.summary ?? story.original_text.slice(0, 180);
   return (
     <article className="story-cue">
@@ -37,6 +37,9 @@ export function StoryCard({story, onDeleteRequest}: StoryCardProps) {
             <h2>{displayTitle}</h2>
             <span className="status-chip">{STATUS_LABELS[story.status]}</span>
           </div>
+          {displayTitle === story.source.title ? null : (
+            <p className="metadata story-source-title">原标题：{story.source.title}</p>
+          )}
           <p>{summary}</p>
           <div className="story-meta metadata">
             <span>

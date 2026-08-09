@@ -71,6 +71,7 @@ class _TranslationPrompt(BaseModel):
 
     source_language_hint: str | None
     target_language: str
+    source_title: str
     source_content: str
     recalled_editorial_memory: list[str]
 
@@ -87,6 +88,7 @@ class _TranslationOutput(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     source_language: str
+    translated_title: str = Field(min_length=1)
     translated_text: str
     summary: str
     key_points: list[str]
@@ -251,6 +253,7 @@ class OpenAICompatibleTextGenerator:
         self,
         *,
         story_id: UUID,
+        source_title: str,
         content: str,
         source_language: str | None,
         target_language: str,
@@ -267,6 +270,7 @@ class OpenAICompatibleTextGenerator:
         prompt = _TranslationPrompt(
             source_language_hint=source_language,
             target_language=target_language,
+            source_title=source_title,
             source_content=content,
             recalled_editorial_memory=self._memory_text(memories),
         )
@@ -278,7 +282,8 @@ class OpenAICompatibleTextGenerator:
             "one primary category: kindness, cats_dogs, forum, or short_video. Also decide whether "
             "it is a plausible editorial candidate; this is advice only and never bypasses human "
             "review. Report confidence, a concise rationale, secondary categories, and concrete "
-            "risk flags. translated_text, summary, and every key_points item MUST be written "
+            "risk flags. translated_title, translated_text, summary, and every key_points item "
+            "MUST be written "
             "in target_language whenever source and target are different languages; copying "
             "or paraphrasing the source in its original language is invalid. When the supplied "
             "source language identifies "
@@ -306,6 +311,11 @@ class OpenAICompatibleTextGenerator:
         return TranslationResult(
             source_language=source_language or generated.source_language,
             target_language=target_language,
+            translated_title=(
+                source_title
+                if chinese_source or same_language(source_language, target_language)
+                else generated.translated_title
+            ),
             translated_text=content if chinese_source else generated.translated_text,
             summary=generated.summary,
             key_points=generated.key_points,
@@ -343,6 +353,7 @@ class OpenAICompatibleTextGenerator:
             )
         if is_chinese_language(target_language):
             target_texts = [
+                ("translated_title", output.translated_title),
                 ("translated_text", output.translated_text),
                 ("summary", output.summary),
                 *((f"key_points[{index}]", value) for index, value in enumerate(output.key_points)),
