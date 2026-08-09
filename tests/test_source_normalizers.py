@@ -2,16 +2,17 @@ from __future__ import annotations
 
 from datetime import timedelta
 from pathlib import Path
+from typing import get_args
 
 import pytest
 from pydantic import ValidationError
 
 from god_news.sources.models import (
-    AudioMediaAsset,
+    SOURCE_ORDER,
+    ActiveSourceName,
     DazhongSourceFields,
     GuardianSourceFields,
     ImageMediaAsset,
-    PikabuQuoteBlock,
     PikabuSourceFields,
     RawPikabuItem,
     RawRedditItem,
@@ -27,6 +28,13 @@ from god_news.sources.text import content_sha256
 FIXTURES = Path(__file__).parent / "fixtures" / "sources"
 
 
+def test_active_news_sources_are_exactly_the_approved_four() -> None:
+    approved = {"dazhong", "reddit", "guardian", "pikabu"}
+
+    assert set(get_args(ActiveSourceName)) == approved
+    assert set(SOURCE_ORDER) == approved
+
+
 def fixture_bytes(source: str) -> bytes:
     return (FIXTURES / f"{source}.json").read_bytes()
 
@@ -34,10 +42,13 @@ def fixture_bytes(source: str) -> bytes:
 @pytest.mark.parametrize(
     ("source", "expected_external_id"),
     [
-        ("dazhong", "dazhong:article-1001"),
-        ("reddit", "reddit:1abcxyz"),
-        ("guardian", "guardian:lifeandstyle/2026/jul/10/kindness-fixture"),
-        ("pikabu", "pikabu:story-9876"),
+        ("dazhong", "dazhong:NEWS3581000EHEVSBXUWQQSM"),
+        ("reddit", "reddit:1u44n91"),
+        (
+            "guardian",
+            "guardian:us-news/2026/jul/18/arizona-teen-rescue-woman-dementia-heatwave",
+        ),
+        ("pikabu", "pikabu:14207552"),
     ],
 )
 def test_each_fixture_has_typed_normalization_contract(
@@ -60,18 +71,18 @@ def test_each_fixture_has_typed_normalization_contract(
 def test_dazhong_nfkc_url_rights_and_media_contract() -> None:
     normalized = create_default_source_registry().normalize_json(fixture_bytes("dazhong"))
 
-    assert normalized.title == "AI 帮助老人回家"
-    assert "第二段 保留温度。" in normalized.content_text
-    assert str(normalized.canonical_url) == "https://example.dzng.com/article/1001"
-    assert normalized.published_at.isoformat() == "2026-07-10T12:30:00+00:00"
-    assert normalized.rights.requires_human_review is False
+    assert normalized.title.startswith("开屏见“好”")
+    assert "爱心餐从每天三十多份增加到近六十份" in normalized.content_text
+    assert str(normalized.canonical_url) == (
+        "https://m.dzplus.dzng.com/share/general/0/NEWS3581000EHEVSBXUWQQSM"
+    )
+    assert normalized.published_at.isoformat() == "2026-08-02T23:30:00+00:00"
+    assert normalized.rights.requires_human_review is True
     assert isinstance(normalized.source_fields, DazhongSourceFields)
-    assert normalized.source_fields.tags == ["AI", "善意"]
-    assert isinstance(normalized.media[0], ImageMediaAsset)
-    assert normalized.media[0].role == "main"
-    assert isinstance(normalized.media[1], VideoMediaAsset)
-    assert normalized.flags.has_images is True
-    assert normalized.flags.has_video is True
+    assert normalized.source_fields.tags == ["好人好事", "爱心餐", "青岛"]
+    assert normalized.media == []
+    assert normalized.flags.has_images is False
+    assert normalized.flags.has_video is False
 
 
 def test_reddit_ignores_api_additions_and_uses_permalink_identity() -> None:
@@ -83,27 +94,29 @@ def test_reddit_ignores_api_additions_and_uses_permalink_identity() -> None:
     assert "bitrate_kbps" not in raw.video.model_fields_set
 
     normalized = create_default_source_registry().normalize(raw)
-    assert normalized.title == "A kind stranger helps"
+    assert normalized.title.startswith("Alright brother, you own that land now")
     assert str(normalized.canonical_url) == (
-        "https://www.reddit.com/r/HumansBeingBros/comments/1abcxyz/a_kind_act/"
+        "https://www.reddit.com/r/HumansBeingBros/comments/1u44n91/"
+        "alright_brother_you_own_that_land_now_farmer/"
     )
     assert normalized.flags.is_user_generated is True
-    assert normalized.flags.is_spoiler is True
+    assert normalized.flags.is_spoiler is False
     assert isinstance(normalized.source_fields, RedditSourceFields)
-    assert str(normalized.source_fields.outbound_url) == "https://kind.example/story"
+    assert str(normalized.source_fields.outbound_url) == "https://v.redd.it/urkrg4exhw6h1"
     assert {asset.kind for asset in normalized.media} == {"image", "video"}
+    assert isinstance(normalized.media[0], ImageMediaAsset)
+    assert isinstance(normalized.media[1], VideoMediaAsset)
 
 
 def test_guardian_preserves_source_fields_and_extracts_media_union() -> None:
     normalized = create_default_source_registry().normalize_json(fixture_bytes("guardian"))
 
-    assert normalized.title == "The kindness of strangers"
+    assert normalized.title.startswith("Arizona teen hailed")
     assert normalized.rights.requires_human_review is True
     assert isinstance(normalized.source_fields, GuardianSourceFields)
-    assert normalized.source_fields.section_id == "lifeandstyle"
+    assert normalized.source_fields.section_id == "us-news"
     assert isinstance(normalized.media[0], ImageMediaAsset)
-    assert isinstance(normalized.media[1], AudioMediaAsset)
-    assert normalized.flags.has_audio is True
+    assert normalized.flags.has_audio is False
 
 
 def test_pikabu_block_union_and_windows_1251_boundary() -> None:
@@ -113,14 +126,19 @@ def test_pikabu_block_union_and_windows_1251_boundary() -> None:
     raw = parse_pikabu_windows_1251_json(legacy_payload)
 
     assert isinstance(raw, RawPikabuItem)
-    assert isinstance(raw.blocks[1], PikabuQuoteBlock)
     normalized = create_default_source_registry().normalize(raw)
-    assert normalized.title == "Добрая история"
-    assert "> Спасибо за доброту! — сосед" in normalized.content_text
+    assert normalized.title.startswith("Сотрудница полиции")
+    assert "лебедят нашли, отогрели" in normalized.content_text
     assert isinstance(normalized.source_fields, PikabuSourceFields)
-    assert normalized.source_fields.tags == ["добро", "люди"]
-    assert normalized.source_fields.block_count == 4
-    assert {asset.kind for asset in normalized.media} == {"image", "video"}
+    assert normalized.source_fields.tags == [
+        "Доброта",
+        "Позитив",
+        "Помощь",
+        "Россия",
+        "Спасение животных",
+    ]
+    assert normalized.source_fields.block_count == 3
+    assert {asset.kind for asset in normalized.media} == {"image"}
 
 
 def test_windows_1251_decoder_fails_closed_on_undefined_byte() -> None:

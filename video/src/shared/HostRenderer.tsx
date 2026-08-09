@@ -1,4 +1,4 @@
-import {interpolate, useCurrentFrame, Video} from 'remotion';
+import {interpolate, OffthreadVideo, useCurrentFrame} from 'remotion';
 
 import {sourceForBrowser} from '../browser-assets';
 import type {SceneTrack} from '../render-plan';
@@ -41,10 +41,11 @@ export const HostRenderer = ({
     : 1;
   const opacity = Math.min(enter, exit);
   return (
-    <Video
+    <OffthreadVideo
       data-host-segment-id={track.segment.segment_id}
       src={source}
       muted
+      transparent
       style={{
         width: '100%',
         height: '100%',

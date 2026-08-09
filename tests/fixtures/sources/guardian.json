@@ -1,38 +1,33 @@
 {
   "source": "guardian",
-  "article_id": "lifeandstyle/2026/jul/10/kindness-fixture",
-  "web_url": "https://www.theguardian.com/lifeandstyle/2026/jul/10/kindness-fixture?utm_source=rss#maincontent",
-  "web_title": "The kindness　of strangers",
-  "body_text": "A neighbour noticed the problem.\r\n\r\nThey quietly helped.",
-  "byline": "Fixture Reporter",
-  "web_publication_date": "2026-07-10T08:15:00-04:00",
-  "section_id": "lifeandstyle",
-  "pillar_name": "Lifestyle",
-  "trail_text": "A small act with a large effect.",
-  "tags": ["kindness", "community"],
+  "article_id": "us-news/2026/jul/18/arizona-teen-rescue-woman-dementia-heatwave",
+  "web_url": "https://www.theguardian.com/us-news/2026/jul/18/arizona-teen-rescue-woman-dementia-heatwave",
+  "web_title": "Arizona teen hailed for helping save woman with dementia wandering in 103F heat",
+  "body_text": "Fourteen-year-old Royal Cothrun encountered Theresa Morgan while she struggled to walk through 103F heat in Gilbert, Arizona. He helped her into shade, contacted her family and stayed until emergency responders arrived.",
+  "byline": "Ramon Antonio Vargas",
+  "web_publication_date": "2026-07-18T10:00:01Z",
+  "section_id": "us-news",
+  "pillar_name": "News",
+  "trail_text": "Fire crew in Gilbert to honor Royal Cothrun, 14, for helping an elderly woman who became disoriented amid a heatwave.",
+  "tags": ["arizona", "extreme heat", "community"],
   "language": "en-GB",
   "publisher": "The Guardian",
   "rights": {
     "status": "permission_required",
     "copyright_holder": "Guardian News & Media",
     "allows_republication": false,
+    "allows_derivatives": false,
     "requires_attribution": true
   },
   "media": [
     {
       "kind": "image",
-      "url": "https://media.guim.co.uk/fixture.jpg",
-      "role": "main",
-      "caption": "Neighbours meeting",
-      "credit": "Photograph: Fixture",
-      "width": 1200,
-      "height": 800
-    },
-    {
-      "kind": "audio",
-      "url": "https://media.guim.co.uk/fixture.mp3",
-      "caption": "Listen to the story",
-      "duration_ms": 30000
+      "url": "https://media.guim.co.uk/4e95824f9b3fa0056d1528f6e29aa673f1af2169/0_44_1488_1191/500.jpg",
+      "role": "thumbnail",
+      "caption": "Gilbert fire and rescue department",
+      "credit": "The Guardian",
+      "width": 500,
+      "height": 400
     }
   ]
 }

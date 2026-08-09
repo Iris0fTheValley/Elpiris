@@ -109,7 +109,7 @@ pnpm --filter @god-news/video test
 
 ## 真实双比例端到端演示
 
-以下命令使用当前配置的 GPT-SoVITS、DSakiko Cubism 2 角色和真实 Remotion 渲染器，生成一套内容驱动的 9:16 / 16:9 技术演示。当前固定演示使用五条保留 NASA 官方来源 URL 的真实新闻快照、一段项目生成的有限长度源视频及经过权利标注的 NASA 来源页证据截图；总时长由实际 TTS、源视频和转场编译得出，不会循环素材或填充到虚假的目标时长。E2E 的 SQLite、Chroma 和媒体目录按运行隔离，不会污染正式故事库；外部素材也不会在权利状态未知时被标记为可发布：
+以下命令使用当前配置的 GPT-SoVITS、DSakiko Cubism 2 角色和真实 Remotion 渲染器，生成一套内容驱动的 9:16 / 16:9 技术演示。当前固定演示使用五条来自 Guardian、Pikabu 和大众网的真实新闻快照、一段项目生成的有限长度源视频及经过权利标注的来源页证据截图；新闻输入严格限制为 Guardian、Reddit、Pikabu、大众网四个注册来源。总时长由实际 TTS、源视频和转场编译得出，不会循环素材或填充到虚假的目标时长。E2E 的 SQLite、Chroma 和媒体目录按运行隔离，不会污染正式故事库；外部素材也不会在权利状态未知时被标记为可发布：
 
 ```powershell
 $env:GOD_NEWS_E2E_DSAKIKO_ROOT = "J:\path\to\DSakiko"
@@ -146,7 +146,7 @@ Template Lab 的 Live2D 预览必须提供真实预渲染 WebM；缺少媒体时
 
 - 四个真实内容源只有在对应凭据、用途授权和站点条款均确认后才会启用；离线演示不访问真实网络。
 - 视频批次、时间轴审阅、审核输入快照、严格类型的 `ProgramDirectorPlan` / `EpisodePlan`、版本化模板、类型化视觉素材、审核通过的原始视频和真实 Remotion 双格式渲染已接入。节目导演只排列不可变的已审核故事、选择注册语义场景、决定已批准原视频是否在故事后插入，并为相邻故事生成显式串联段；模板与确定性编译器负责视觉变体、布局和时间轴。`GOD_NEWS_VIDEO_RENDERER_ENABLED=false` 仍是安全默认值。
-- DSakiko 兼容的 Cubism 2 Live2D 可选适配器会在最终批次 TTS 后，按每段最终 `speaker_id` 在一次性 OpenGL 子进程中生成透明 VP9 WebM。离线渲染使用与 SDK 同源的可注入帧时钟，不依赖子进程实际耗时。生产默认由 SDK 独占动作、姿态和物理，只在最后覆盖确定性眨眼、平滑眼神与嘴型；使用稳定 `idle` 动作且关闭运行时会大幅摆动头身的自动呼吸。需要更强表演时可显式配置 `GOD_NEWS_VIDEO_LIVE2D_MOTION_POLICY=emotion_once` 和 `GOD_NEWS_VIDEO_LIVE2D_SDK_AUTO_BREATH=true`。审核快照记录角色版本、模型树哈希、音频哈希和角色视频哈希；Remotion 不加载 Live2D SDK。启用前须配置 `GOD_NEWS_VIDEO_LIVE2D_PYTHON_EXECUTABLE` 与 `GOD_NEWS_VIDEO_LIVE2D_TRUSTED_ASSET_ROOTS`，模型文件不进入仓库。
+- DSakiko 兼容的 Cubism 2 Live2D 可选适配器会在最终批次 TTS 后，按每段最终 `speaker_id` 在一次性 OpenGL 子进程中生成透明 VP9 WebM。离线渲染使用与 SDK 同源的可注入帧时钟，不依赖子进程实际耗时。生产默认由 SDK 独占动作、姿态和物理，只在最后覆盖确定性眨眼、平滑眼神与嘴型；使用稳定 `idle` 动作且关闭运行时会大幅摆动头身的自动呼吸。需要更强表演时可显式配置 `GOD_NEWS_VIDEO_LIVE2D_MOTION_POLICY=emotion_once` 和 `GOD_NEWS_VIDEO_LIVE2D_SDK_AUTO_BREATH=true`。审核快照记录角色版本、模型树哈希、音频哈希和角色视频哈希；Remotion 不加载 Live2D SDK，并通过透明 `OffthreadVideo` 在渲染时逐帧提取主持人画面，避免浏览器视频时钟造成单帧错位。启用前须配置 `GOD_NEWS_VIDEO_LIVE2D_PYTHON_EXECUTABLE` 与 `GOD_NEWS_VIDEO_LIVE2D_TRUSTED_ASSET_ROOTS`，模型文件不进入仓库。
 - Live2D 生产适配器要求单一参数所有权、完整逐帧 JSONL 轨迹以及参数级和图像级动态门禁全部通过；当前运行边界与质量检查见 [`docs/quality/live2d-motion.md`](docs/quality/live2d-motion.md)，历史实验记录归档在 `docs/archive/`。
 - 生产视频质量门需要功能完整的 FFmpeg（支持 `blackdetect` 与 `freezedetect`），通过 `GOD_NEWS_VIDEO_QUALITY_FFMPEG_COMMAND` 配置。Remotion 自带的裁剪版 FFmpeg 仍用于封装，但不会被误当作视觉质量分析器。
 - 已启用 TTS 的角色使用独立的权重对、七组情绪参考音频/文本与可选参考语言；合成器按段选择角色和情绪。为保护显存，不同权重永不并存，切换时会先终止旧本地子进程。

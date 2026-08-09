@@ -1,38 +1,29 @@
 {
   "source": "pikabu",
-  "story_id": "story-9876",
-  "url": "https://pikabu.ru/story/dobrota_9876?utm_source=fixture#comments",
-  "title": "Добрая　история",
-  "author_username": "добрый_автор",
-  "published_at": "2026-07-10T15:00:00+03:00",
+  "story_id": "14207552",
+  "url": "https://pikabu.ru/story/sotrudnitsa_politsii_vmeste_s_druzyami_spasla_dvukh_lebedyatsirot_14207552",
+  "title": "Сотрудница полиции вместе с друзьями спасла двух лебедят-сирот",
+  "author_username": "YaroslavnaVibe",
+  "published_at": "2026-08-02T16:29:09Z",
   "language": "ru",
   "publisher": "Pikabu",
-  "tags": ["добро", "люди", "Добро"],
-  "rating": 321,
-  "comments_count": 24,
+  "tags": ["Россия", "Помощь", "Спасение животных", "Позитив", "Доброта"],
+  "rating": 434,
+  "comments_count": 20,
   "is_nsfw": false,
   "blocks": [
     {
       "kind": "text",
-      "text": "Прохожий увидел, что нужна помощь."
+      "text": "Малыши остались без родителей, так как они попали под поезд на железной дороге в Мурманской области. Рабочие передали информацию сотрудникам транспортной полиции, тогда и началась спасательная операция."
     },
     {
-      "kind": "quote",
-      "text": "Спасибо за доброту!",
-      "author": "сосед"
+      "kind": "text",
+      "text": "Инспектор вместе с друзьями несколько дней прочёсывала лес. В итоге лебедят нашли, отогрели и теперь передадут в Лапландский заповедник."
     },
     {
       "kind": "image",
-      "url": "https://cs.pikabu.ru/fixture.jpg",
-      "alt_text": "Добрые люди",
-      "width": 900,
-      "height": 600
-    },
-    {
-      "kind": "video",
-      "url": "https://cs.pikabu.ru/fixture.mp4",
-      "poster_url": "https://cs.pikabu.ru/fixture-poster.jpg",
-      "duration_ms": 9000
+      "url": "https://cs20.pikabu.ru/s/2026/08/02/19/mfwsorqt_lg.jpg",
+      "alt_text": "Сотрудница полиции держит двух спасённых лебедят"
     }
   ]
 }

@@ -169,8 +169,8 @@ async def test_local_provider_uses_json_schema_and_retries_invalid_output() -> N
 @pytest.mark.asyncio
 async def test_translation_retries_when_provider_copies_source_instead_of_translating() -> None:
     source = (
-        "NASA created 18 new awards through its Innovative Advanced Concepts program "
-        "to study early-stage aerospace technology ideas."
+        "The Guardian reported that Royal Cothrun helped a woman with dementia reach safety "
+        "after finding her lost in 103F heat in Gilbert, Arizona."
     )
 
     def completion(translated_text: str):  # type: ignore[no-untyped-def]
@@ -183,13 +183,13 @@ async def test_translation_retries_when_provider_copies_source_instead_of_transl
                             {
                                 "source_language": "en",
                                 "translated_text": translated_text,
-                                "summary": "NASA 资助早期航天技术概念研究。",
-                                "key_points": ["共设立十八项新资助。"],
+                                "summary": "少年帮助一名在酷暑中迷路的失智老人获救。",
+                                "key_points": ["他陪伴老人直到救援人员抵达。"],
                                 "category": "kindness",
                                 "secondary_categories": [],
                                 "candidate_recommendation": True,
                                 "classification_confidence": 0.9,
-                                "classification_rationale": "A real NASA research announcement.",
+                                "classification_rationale": "A real Guardian kindness report.",
                                 "risk_flags": [],
                             },
                             ensure_ascii=False,
@@ -202,7 +202,9 @@ async def test_translation_retries_when_provider_copies_source_instead_of_transl
     create = AsyncMock(
         side_effect=[
             completion(source),
-            completion("NASA 通过创新先进概念计划设立了十八项新资助;用于研究早期航天技术构想。"),
+            completion(
+                "《卫报》报道，Royal Cothrun 帮助一名在酷暑中迷路的失智老人安全获救。"  # noqa: RUF001
+            ),
         ]
     )
     generator = OpenAICompatibleTextGenerator(
@@ -233,7 +235,7 @@ async def test_translation_retries_when_provider_copies_source_instead_of_transl
         memories=[],
     )
 
-    assert result.translated_text.startswith("NASA 通过")
+    assert result.translated_text.startswith("《卫报》报道")
     assert create.await_count == 2
     retry_prompt = create.await_args_list[1].kwargs["messages"][1]["content"]
     assert "PREVIOUS_OUTPUT_REJECTED" in retry_prompt
@@ -290,7 +292,7 @@ async def test_translation_fails_closed_after_repeated_wrong_language_output() -
     with pytest.raises(LLMGenerationError, match="structured output"):
         await generator.translate_and_summarize(
             story_id=uuid4(),
-            content="NASA announced a new science program.",
+            content="The Guardian published a verified community rescue report.",
             source_language="en",
             target_language="zh-CN",
             memories=[],

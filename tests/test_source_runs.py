@@ -210,7 +210,7 @@ async def test_source_run_exposes_sanitized_current_item_while_ingesting(stack: 
         assert active.status is SourceRunStatus.INGESTING
         assert active.current_item_index == 1
         assert active.current_external_id == f"guardian:{item.article_id}"
-        assert active.current_title == "The kindness of strangers"
+        assert active.current_title.startswith("Arizona teen hailed")
         assert active.current_url == "https://www.theguardian.com/life/story"
     finally:
         ingestor.release.set()

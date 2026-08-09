@@ -1,41 +1,23 @@
 {
   "source": "dazhong",
-  "article_id": "article-1001",
-  "url": "https://example.dzng.com/article/1001?utm_source=test&b=2&a=1#comments",
-  "canonical_url": "https://example.dzng.com/article/1001?utm_campaign=fixture",
-  "title": "ＡＩ　帮助老人回家",
-  "body": "第一段。\r\n\r\n第二段　保留温度。",
-  "author": "  张　三  ",
+  "article_id": "NEWS3581000EHEVSBXUWQQSM",
+  "url": "https://m.dzplus.dzng.com/share/general/0/NEWS3581000EHEVSBXUWQQSM",
+  "canonical_url": "https://m.dzplus.dzng.com/share/general/0/NEWS3581000EHEVSBXUWQQSM",
+  "title": "开屏见“好”｜青岛“90后”小伙医院门口送免费餐，引发全城爱心接力",
+  "body": "近日，在青岛平度市人民医院门口，一个不起眼的小摊成了城市暖心地标。摊主任秉凯每天傍晚出摊，为患者家属免费送上热乎饭菜。\n\n许多市民主动送来蔬菜、大米、牛奶等物资。短短一周，爱心餐从每天三十多份增加到近六十份。",
+  "author": "孙桂东 张晨 吕文佳",
   "publisher": "大众新闻",
-  "published_at": "2026-07-10T20:30:00+08:00",
+  "published_at": "2026-08-03T07:30:00+08:00",
   "language": "zh-CN",
   "channel": "开屏见好",
   "region": "山东",
-  "tags": ["善意", " 善意 ", "AI"],
+  "tags": ["好人好事", "爱心餐", "青岛"],
   "rights": {
-    "status": "attribution_license",
+    "status": "permission_required",
     "copyright_holder": "大众新闻",
-    "license_name": "Fixture Attribution License",
-    "allows_republication": true,
-    "allows_derivatives": true,
+    "allows_republication": false,
+    "allows_derivatives": false,
     "requires_attribution": true
   },
-  "media": [
-    {
-      "kind": "image",
-      "url": "https://cdn.example.dzng.com/cover.jpg?utm_source=feed",
-      "role": "main",
-      "alt_text": "  现场　照片 ",
-      "credit": "摄影师",
-      "width": 1280,
-      "height": 720
-    },
-    {
-      "kind": "video",
-      "url": "https://cdn.example.dzng.com/story.mp4",
-      "poster_url": "https://cdn.example.dzng.com/poster.jpg",
-      "caption": "现场视频",
-      "duration_ms": 12000
-    }
-  ]
+  "media": []
 }

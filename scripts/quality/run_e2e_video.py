@@ -1,3 +1,4 @@
+# ruff: noqa: RUF001 -- multilingual real-news fixtures intentionally mix scripts.
 from __future__ import annotations
 
 import argparse
@@ -12,6 +13,7 @@ from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import cast
+from urllib.parse import urlparse
 from uuid import UUID, uuid4
 
 from god_news.application.video_batches import VideoBatchService
@@ -89,6 +91,7 @@ from god_news.operations.models import (
     RoleProfileCreate,
     RoleVisualAssets,
 )
+from god_news.sources.models import ActiveSourceName
 from god_news.video_errors import VideoRenderingError
 
 WORKSPACE = Path(__file__).resolve().parents[2]
@@ -96,8 +99,10 @@ WORKSPACE = Path(__file__).resolve().parents[2]
 
 @dataclass(frozen=True, slots=True)
 class RealNewsStorySpec:
+    source: ActiveSourceName
     title: str
     source_url: str
+    source_language: str
     original_text: str
     spoken_text: str
     caption_text: str
@@ -106,109 +111,119 @@ class RealNewsStorySpec:
     tone_hz: int
 
 
+APPROVED_NEWS_SOURCE_HOSTS: dict[ActiveSourceName, frozenset[str]] = {
+    "dazhong": frozenset({"m.dzplus.dzng.com"}),
+    "reddit": frozenset({"reddit.com", "www.reddit.com"}),
+    "guardian": frozenset({"www.theguardian.com"}),
+    "pikabu": frozenset({"pikabu.ru"}),
+}
+
+
 REAL_NEWS_STORIES: tuple[RealNewsStorySpec, ...] = (
     RealNewsStorySpec(
-        title="NASA Awards 2026 Innovative Technology Concepts",
-        source_url=(
-            "https://www.nasa.gov/news-release/"
-            "nasa-awards-2026-innovative-technology-concepts/"
-        ),
+        source="guardian",
+        title="Arizona teen hailed for helping save woman with dementia wandering in 103F heat",
+        source_url="https://www.theguardian.com/us-news/2026/jul/18/arizona-teen-rescue-woman-dementia-heatwave",
+        source_language="en-GB",
         original_text=(
-            "NASA's Innovative Advanced Concepts program created 18 Phase I awards totaling "
-            "$3.2 million to investigate early-stage aerospace technology ideas."
+            "Fourteen-year-old Royal Cothrun found Theresa Morgan, who has dementia, lost in "
+            "103F heat in Gilbert, Arizona. He moved her into shade, contacted her family, and "
+            "stayed until emergency responders arrived."
         ),
-        spoken_text="NASAは、未来の宇宙技術を研究する十八件の新しい構想を支援します。",
-        caption_text="NASA 将资助十八项面向未来的航天技术构想研究。",
+        spoken_text="十四歳の少年が、猛暑の中で迷っていた高齢女性を見つけ、救助が来るまで寄り添いました。",
+        caption_text="一名十四岁少年帮助在酷暑中迷路的失智老人安全获救。",
         source_captions=(
-            ("NASA selected 18 Phase I concepts.", "NASA 选中了十八项第一阶段构想。"),
-            ("The awards total $3.2 million.", "本轮资助总额为三百二十万美元。"),
-            ("Each concept receives a nine-month study.", "每项构想将开展为期九个月的研究。"),
+            (
+                "Royal Cothrun noticed that Theresa Morgan needed help.",
+                "Royal Cothrun 注意到 Theresa Morgan 需要帮助。",
+            ),
+            ("The temperature had reached 103F.", "当时气温达到华氏一百零三度。"),
+            ("He stayed until emergency responders arrived.", "他一直陪伴老人，直到救援人员抵达。"),
         ),
         category=ContentCategory.KINDNESS,
         tone_hz=330,
     ),
     RealNewsStorySpec(
-        title="NASA Johnson Interns Shaping the Future of Exploration",
-        source_url=(
-            "https://www.nasa.gov/centers-and-facilities/johnson/"
-            "nasa-johnson-interns-shaping-the-future-of-exploration/"
-        ),
+        source="guardian",
+        title="The kindness of strangers: another diner paid my Father's Day bill",
+        source_url="https://www.theguardian.com/lifeandstyle/2026/jul/20/kindness-of-strangers-grief-loss-fathers-day-diner-who-paid-my-bill",
+        source_language="en-GB",
         original_text=(
-            "NASA Johnson Space Center interns are contributing to real engineering, science, "
-            "communications, and human-spaceflight projects while preparing for aerospace careers."
+            "After losing his wife and son, Allen Renfrey ate alone at a Vietnamese restaurant on "
+            "Father's Day. An unidentified couple quietly paid his bill because they did not want "
+            "him to spend the occasion alone."
         ),
-        spoken_text="NASAの実習生たちは、有人宇宙飛行を支える実際のプロジェクトに参加しています。",
-        caption_text="NASA 的实习生正在参与支持载人航天的真实项目。",
+        spoken_text="父の日に一人で食事をしていた男性へ、見知らぬ夫婦がそっと代金を支払いました。",
+        caption_text="一对陌生夫妇悄悄为父亲节独自用餐的男子付了账。",
         source_captions=(
-            ("Interns work alongside NASA specialists.", "实习生与 NASA 专业人员并肩工作。"),
-            ("They contribute to real-world projects.", "他们为真实工程项目作出贡献。"),
-            (
-                "The experience prepares future aerospace workers.",
-                "这些经历帮助他们成长为未来的航天人才。",
-            ),
+            ("Allen Renfrey was dining alone on Father's Day.", "Allen Renfrey 在父亲节独自用餐。"),
+            ("Another couple paid his bill before leaving.", "另一对夫妇离开前替他付了账。"),
+            ("The anonymous kindness moved him deeply.", "这份匿名善意令他深受感动。"),
         ),
         category=ContentCategory.KINDNESS,
         tone_hz=392,
     ),
     RealNewsStorySpec(
-        title="NASA Assigns Astronaut Deniz Burnham to First Space Station Mission",
-        source_url=(
-            "https://www.nasa.gov/news-release/"
-            "nasa-assigns-astronaut-deniz-burnham-to-first-space-station-mission/"
-        ),
+        source="guardian",
+        title="The kindness of strangers: our hotel's owners were heaven-sent",
+        source_url="https://www.theguardian.com/lifeandstyle/2026/jul/27/the-kindness-of-strangers-when-mum-was-hospitalised-on-a-family-holiday-our-hotels-owners-were-heaven-sent",
+        source_language="en-GB",
         original_text=(
-            "NASA assigned astronaut Deniz Burnham to her first International Space Station "
-            "mission as an Expedition 76 flight engineer, targeted to launch in March 2027."
+            "When Melanie Brock's mother suffered a brain haemorrhage during a family holiday in "
+            "France, hotel owners Jean-Claude and Therese cooked for the children, washed their "
+            "clothes, found English-speaking support, and helped arrange accommodation."
         ),
-        spoken_text="宇宙飛行士デニズ・バーナムが、初めて国際宇宙ステーションへ向かいます。",
-        caption_text="宇航员 Deniz Burnham 将首次前往国际空间站。",
+        spoken_text="旅先で母親が倒れた家族を、ホテルの夫婦が食事や洗濯、宿泊先の手配まで支えました。",
+        caption_text="母亲在异国住院后，旅馆主人从饮食、洗衣到住宿全力帮助一家人。",
         source_captions=(
-            ("Burnham will serve as a flight engineer.", "Burnham 将担任飞行工程师。"),
-            ("Launch is targeted for March 2027.", "任务计划于二〇二七年三月发射。"),
-            ("The crew will spend about seven months in orbit.", "机组预计将在轨工作约七个月。"),
+            (
+                "The family was far from home during a medical emergency.",
+                "这家人在异国遭遇了医疗紧急情况。",
+            ),
+            (
+                "The hotel owners cooked meals and washed clothes.",
+                "旅馆主人帮孩子们做饭并清洗衣物。",
+            ),
+            ("They also helped the family find accommodation.", "他们还帮助一家人解决住宿问题。"),
         ),
         category=ContentCategory.KINDNESS,
         tone_hz=440,
     ),
     RealNewsStorySpec(
-        title="NASA Astronaut Chris Williams Returns to Earth",
-        source_url=(
-            "https://www.nasa.gov/image-article/"
-            "nasa-astronaut-chris-williams-returns-to-earth/"
-        ),
+        source="pikabu",
+        title="Сотрудница полиции вместе с друзьями спасла двух лебедят-сирот",
+        source_url="https://pikabu.ru/story/sotrudnitsa_politsii_vmeste_s_druzyami_spasla_dvukh_lebedyatsirot_14207552",
+        source_language="ru",
         original_text=(
-            "NASA astronaut Chris Williams returned to Earth after eight months aboard the "
-            "International Space Station, where he supported science and completed two spacewalks."
+            "В Мурманской области сотрудница транспортной полиции вместе с друзьями несколько "
+            "дней искала двух осиротевших лебедят. Птиц нашли, отогрели и подготовили к передаче "
+            "в Лапландский заповедник."
         ),
-        spoken_text="宇宙飛行士クリス・ウィリアムズが、八か月の任務を終えて地球へ帰還しました。",
-        caption_text="宇航员 Chris Williams 完成八个月任务后返回地球。",
+        spoken_text="警察官と友人たちは数日間森を捜し、親を失った二羽の白鳥を無事に保護しました。",
+        caption_text="女警官和朋友们搜寻数日，终于救下两只失去父母的小天鹅。",
         source_captions=(
-            ("Williams spent eight months on the station.", "Williams 在空间站工作了八个月。"),
-            ("He supported scientific investigations.", "他参与了多项科学研究。"),
-            ("He also completed two spacewalks.", "他还完成了两次太空行走。"),
+            ("Лебедята остались без родителей.", "两只小天鹅失去了父母。"),
+            ("Поиски в лесу продолжались несколько дней.", "救援人员在森林中搜寻了数日。"),
+            ("Птиц передадут в Лапландский заповедник.", "小天鹅将被送往拉普兰自然保护区。"),
         ),
         category=ContentCategory.KINDNESS,
         tone_hz=494,
     ),
     RealNewsStorySpec(
-        title="NASA's Swift Sees 'Wandering' Mega Black Hole Shredding Star",
-        source_url=(
-            "https://science.nasa.gov/missions/swift/"
-            "nasas-swift-sees-wandering-mega-black-hole-shredding-star/"
-        ),
+        source="dazhong",
+        title="开屏见“好”｜青岛“90后”小伙医院门口送免费餐，引发全城爱心接力",
+        source_url="https://m.dzplus.dzng.com/share/general/0/NEWS3581000EHEVSBXUWQQSM",
+        source_language="zh-CN",
         original_text=(
-            "NASA's Neil Gehrels Swift Observatory detected a rare tidal disruption event from "
-            "a supermassive black hole unusually far from the center of its galaxy."
+            "青岛平度市人民医院门口，任秉凯每天傍晚为患者家属免费提供热饭菜。"
+            "邻里陆续送来蔬菜、大米、牛奶等物资，一周内爱心餐从三十多份增加到近六十份。"
         ),
-        spoken_text="NASAのスウィフト衛星が、銀河の中心から離れた巨大ブラックホールの珍しい現象を捉えました。",
-        caption_text="NASA 的 Swift 卫星捕捉到远离星系中心的巨型黑洞罕见活动。",
+        spoken_text="病院の前で始まった無料の夕食が、町の人々をつなぐ支援の輪へ広がりました。",
+        caption_text="医院门口的一份免费晚餐，逐渐汇成全城参与的爱心接力。",
         source_captions=(
-            ("Swift detected a tidal disruption event.", "Swift 探测到一次潮汐瓦解事件。"),
-            ("The black hole lies far from the galactic center.", "这个黑洞远离所在星系的中心。"),
-            (
-                "The observation gives astronomers a rare new example.",
-                "这次观测为天文学家提供了罕见的新样本。",
-            ),
+            ("任秉凯每天傍晚为患者家属免费送饭。", "任秉凯每天傍晚为患者家属免费送饭。"),
+            ("许多市民主动捐赠食材和物资。", "许多市民主动捐赠食材和物资。"),
+            ("爱心餐一周内增加到每天近六十份。", "爱心餐一周内增加到每天近六十份。"),
         ),
         category=ContentCategory.KINDNESS,
         tone_hz=523,
@@ -556,13 +571,18 @@ def build_story(
 ) -> tuple[Story, ProductionManifest]:
     original_text = spec.original_text
     source_url = spec.source_url
+    source_host = (urlparse(source_url).hostname or "").lower()
+    if source_host not in APPROVED_NEWS_SOURCE_HOSTS[spec.source]:
+        raise ValueError(
+            f"E2E source URL host {source_host!r} does not match approved source {spec.source!r}."
+        )
     source = SourceSnapshot(
         kind=SourceKind.URL,
         source_uri=source_url,
         final_uri=source_url,
         title=spec.title,
-        detected_language="en",
-        fetcher="real-news-snapshot",
+        detected_language=spec.source_language,
+        fetcher=f"source-contract:{spec.source}",
         content_sha256=hashlib.sha256(original_text.encode("utf-8")).hexdigest(),
     )
     segment = ScriptSegment(
@@ -637,7 +657,7 @@ def build_story(
             caption_language="zh-CN",
         ),
         translation=TranslationResult(
-            source_language="en",
+            source_language=spec.source_language,
             target_language="zh-CN",
             translated_text=spec.caption_text,
             summary=spec.caption_text,
@@ -648,7 +668,9 @@ def build_story(
                 model_candidate_recommendation=True,
                 candidate_recommendation=True,
                 confidence=1.0,
-                rationale="Public NASA news snapshot retained with its canonical source URL.",
+                rationale=(
+                    f"Real {spec.source} news snapshot retained with its canonical source URL."
+                ),
             ),
         ),
         script=script,
@@ -1441,14 +1463,14 @@ async def main() -> None:
     report_path = run_root / "artifact-report.json"
     source_audio = run_root / "source-story-evidence.wav"
     write_evidence_wav(source_audio)
-    snapshot_root = WORKSPACE / "assets" / "news-snapshots" / "nasa-2026"
-    image_path = (snapshot_root / "niac-awards.png").resolve(strict=True)
+    snapshot_root = WORKSPACE / "assets" / "news-snapshots" / "approved-sources-2026"
+    image_path = (snapshot_root / "guardian-arizona-teen.png").resolve(strict=True)
     story_screenshots = [
-        (snapshot_root / "niac-awards.png").resolve(strict=True),
-        (snapshot_root / "johnson-interns.png").resolve(strict=True),
-        (snapshot_root / "deniz-burnham.png").resolve(strict=True),
-        (snapshot_root / "chris-williams.png").resolve(strict=True),
-        (snapshot_root / "swift-black-hole.png").resolve(strict=True),
+        (snapshot_root / "guardian-arizona-teen.png").resolve(strict=True),
+        (snapshot_root / "guardian-fathers-day.png").resolve(strict=True),
+        (snapshot_root / "guardian-hotel-kindness.png").resolve(strict=True),
+        (snapshot_root / "pikabu-swan-rescue.png").resolve(strict=True),
+        (snapshot_root / "dazhong-free-meals.png").resolve(strict=True),
     ]
 
     ffmpeg = (dsakiko_root / "GPT_SoVITS" / "ffmpeg.exe").resolve(strict=True)
@@ -1482,7 +1504,7 @@ async def main() -> None:
                 image_path=image_path,
                 screenshot_path=story_screenshots[index],
                 # The first story exercises both editor image and source-page
-                # review using the same rights-documented NASA snapshot.
+                # review using the same rights-documented approved-source snapshot.
                 include_editor_image=index == 0,
             )
             stories.append(approved)

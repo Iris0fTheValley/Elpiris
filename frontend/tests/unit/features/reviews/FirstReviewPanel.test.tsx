@@ -52,7 +52,7 @@ describe('FirstReviewPanel', () => {
       version: 4,
       translation: {
         ...storyFixture.translation!,
-        translated_text: 'NASA 已重新生成经过语言校验的中文译文。',
+        translated_text: '《卫报》新闻已重新生成经过语言校验的中文译文。',
         summary: '重新生成的中文摘要。',
       },
     };

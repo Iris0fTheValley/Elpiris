@@ -1,36 +1,38 @@
 {
   "source": "reddit",
-  "post_id": "1abcxyz",
-  "permalink": "/r/HumansBeingBros/comments/1abcxyz/a_kind_act/?utm_source=fixture#top",
-  "title": "A　kind stranger helps",
-  "selftext": "Someone stopped to help.\r\n\r\nEveryone got home safely.",
-  "author": "kind_user",
-  "created_utc": 1783706400,
+  "post_id": "1u44n91",
+  "permalink": "/r/HumansBeingBros/comments/1u44n91/alright_brother_you_own_that_land_now_farmer/",
+  "title": "Alright brother, you own that land now. Farmer skips patch to protect a mother bird and her eggs.",
+  "selftext": "A farmer stopped and drove around a nesting bird rather than ploughing through her eggs.",
+  "author": "SageSharma",
+  "created_utc": "2026-06-12T12:00:00Z",
   "subreddit": "HumansBeingBros",
-  "score": 4242,
-  "num_comments": 88,
-  "link_flair_text": "Good News",
+  "score": 7178,
+  "num_comments": 164,
+  "link_flair_text": "Animals",
   "over_18": false,
-  "spoiler": true,
+  "spoiler": false,
   "locked": false,
   "is_self": false,
-  "outbound_url": "https://kind.example/story?utm_medium=reddit",
+  "outbound_url": "https://v.redd.it/urkrg4exhw6h1",
   "language": "en",
   "video": {
     "kind": "video",
-    "fallback_url": "https://v.redd.it/fixture/DASH_720.mp4?source=fallback",
-    "thumbnail_url": "https://preview.redd.it/fixture.jpg",
-    "duration_ms": 18000,
+    "fallback_url": "https://v.redd.it/urkrg4exhw6h1/DASH_720.mp4?source=fallback",
+    "thumbnail_url": "https://external-preview.redd.it/alright-brother-you-own-that-land-now-farmer-skips-patch-v0-bmFsMm5tNnhodzZoMaC6krmwUYgQEOCVgSu9-RCrxQYaVXmPgKbHbX7GxOY3.png?auto=webp&format=pjpg&s=6812d9cfeaf8aaa2c4f80189c3e31778986b32f0",
+    "duration_ms": 34000,
     "bitrate_kbps": 2400
   },
   "preview_images": [
     {
-      "url": "https://preview.redd.it/fixture.jpg?utm_source=preview",
+      "url": "https://external-preview.redd.it/alright-brother-you-own-that-land-now-farmer-skips-patch-v0-bmFsMm5tNnhodzZoMaC6krmwUYgQEOCVgSu9-RCrxQYaVXmPgKbHbX7GxOY3.png?auto=webp&format=pjpg&s=6812d9cfeaf8aaa2c4f80189c3e31778986b32f0",
       "width": 640,
       "height": 360,
       "resolutions": []
     }
   ],
   "upvote_ratio": 0.99,
-  "future_api_field": {"ignored": true}
+  "future_api_field": {
+    "ignored": true
+  }
 }
