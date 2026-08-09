@@ -131,6 +131,15 @@ class _UrlPolicy:
             raise FetchPolicyError("blocked")
 
 
+class _InterruptedStream(httpx.AsyncByteStream):
+    def __init__(self, payload: bytes) -> None:
+        self._payload = payload
+
+    async def __aiter__(self) -> AsyncIterator[bytes]:
+        yield self._payload
+        raise httpx.ReadError("connection interrupted")
+
+
 @pytest.mark.asyncio
 async def test_source_video_acquisition_is_idempotent_and_keeps_reddit_review_only(
     tmp_path: Path,
@@ -301,6 +310,114 @@ async def test_source_media_http_adapter_streams_and_maps_boundary_failures() ->
         with pytest.raises(SourceMediaAcquisitionError, match="outbound request policy"):
             async with downloader.stream(story_id, "https://media.example/video.mp4"):
                 pass
+
+
+@pytest.mark.asyncio
+async def test_source_media_http_adapter_resumes_an_interrupted_declared_body() -> None:
+    story_id = _story().story_id
+    split = 12
+    requests: list[httpx.Request] = []
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        requests.append(request)
+        if len(requests) == 1:
+            return httpx.Response(
+                200,
+                headers={"content-type": "video/mp4", "content-length": str(len(MP4_BYTES))},
+                stream=_InterruptedStream(MP4_BYTES[:split]),
+                request=request,
+            )
+        assert request.headers["range"] == f"bytes={split}-"
+        return httpx.Response(
+            206,
+            headers={
+                "content-type": "video/mp4",
+                "content-range": f"bytes {split}-{len(MP4_BYTES) - 1}/{len(MP4_BYTES)}",
+                "content-length": str(len(MP4_BYTES) - split),
+            },
+            content=MP4_BYTES[split:],
+            request=request,
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        downloader = HttpSourceMediaDownloader(  # type: ignore[arg-type]
+            client,
+            _UrlPolicy(),
+            max_attempts=2,
+        )
+        async with downloader.stream(story_id, "https://media.example/video.mp4") as (
+            content_type,
+            body,
+        ):
+            received = b"".join([chunk async for chunk in body])
+
+    assert content_type == "video/mp4"
+    assert received == MP4_BYTES
+    assert len(requests) == 2
+
+
+@pytest.mark.asyncio
+async def test_source_media_http_adapter_retries_initial_connection_failure() -> None:
+    story_id = _story().story_id
+    calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise httpx.ConnectTimeout("temporary connection failure", request=request)
+        return httpx.Response(
+            200,
+            headers={"content-type": "video/mp4"},
+            content=MP4_BYTES,
+            request=request,
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        downloader = HttpSourceMediaDownloader(  # type: ignore[arg-type]
+            client,
+            _UrlPolicy(),
+            max_attempts=2,
+        )
+        async with downloader.stream(story_id, "https://media.example/video.mp4") as (
+            _,
+            body,
+        ):
+            received = b"".join([chunk async for chunk in body])
+
+    assert received == MP4_BYTES
+    assert calls == 2
+
+
+@pytest.mark.asyncio
+async def test_source_media_http_adapter_refuses_unsafe_full_body_resume() -> None:
+    story_id = _story().story_id
+    calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(
+                200,
+                headers={"content-type": "video/mp4", "content-length": str(len(MP4_BYTES))},
+                stream=_InterruptedStream(MP4_BYTES[:8]),
+                request=request,
+            )
+        return httpx.Response(200, content=MP4_BYTES, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        downloader = HttpSourceMediaDownloader(  # type: ignore[arg-type]
+            client,
+            _UrlPolicy(),
+            max_attempts=2,
+        )
+        with pytest.raises(SourceMediaAcquisitionError, match="safe byte-range resume"):
+            async with downloader.stream(story_id, "https://media.example/video.mp4") as (
+                _,
+                body,
+            ):
+                _ = b"".join([chunk async for chunk in body])
 
 
 @pytest.mark.asyncio

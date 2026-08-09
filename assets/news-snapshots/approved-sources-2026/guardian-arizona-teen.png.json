@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "source": "guardian",
+  "canonical_url": "https://www.theguardian.com/us-news/2026/jul/18/arizona-teen-rescue-woman-dementia-heatwave",
+  "captured_at": "2026-08-09T17:22:26.754Z",
+  "capture_kind": "semantic_article_evidence",
+  "capture_transport": "live_browser",
+  "title": "Arizona teen hailed for helping save woman with dementia wandering in 103F heat",
+  "selected_image_url": "https://i.guim.co.uk/img/media/4e95824f9b3fa0056d1528f6e29aa673f1af2169/0_0_1488_1278/master/1488.jpg?width=620&dpr=1&s=none&crop=none",
+  "selected_image_alt": "a building with flags in front of it",
+  "width": 1400,
+  "height": 820,
+  "sha256": "2c37513c8f11dff202f331587a8f1336ddf07d5510af3a3d74e30bf8aede17eb",
+  "publish_eligible": false,
+  "rights_note": "Internal editorial review evidence; republication rights require human review."
+}

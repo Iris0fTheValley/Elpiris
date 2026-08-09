@@ -35,6 +35,25 @@ def test_active_news_sources_are_exactly_the_approved_four() -> None:
     assert set(SOURCE_ORDER) == approved
 
 
+def test_real_pikabu_video_fixture_preserves_review_only_media_provenance() -> None:
+    normalized = create_default_source_registry().normalize_json(
+        (FIXTURES / "pikabu_video.json").read_bytes()
+    )
+
+    assert normalized.external_id == "pikabu:13922789"
+    assert normalized.flags.has_video is True
+    assert normalized.rights.status == "permission_required"
+    assert normalized.rights.requires_human_review is True
+    assert len(normalized.media) == 1
+    video = normalized.media[0]
+    assert isinstance(video, VideoMediaAsset)
+    assert str(video.url) == (
+        "https://cs16.pikabu.ru/s/2026/04/27/17/"
+        "zoxx3sxj_s0f0d9m0_448x848.mp4"
+    )
+    assert video.duration_ms == 9_000
+
+
 def fixture_bytes(source: str) -> bytes:
     return (FIXTURES / f"{source}.json").read_bytes()
 

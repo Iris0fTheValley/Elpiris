@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "source": "guardian",
+  "canonical_url": "https://www.theguardian.com/lifeandstyle/2026/jul/20/kindness-of-strangers-grief-loss-fathers-day-diner-who-paid-my-bill",
+  "captured_at": "2026-08-09T17:24:28.325Z",
+  "capture_kind": "semantic_article_evidence",
+  "capture_transport": "live_browser",
+  "title": "The kindness of strangers: After losing my wife and son, I ate alone one Father’s Day – and another diner paid my bill",
+  "selected_image_url": "https://i.guim.co.uk/img/media/dbd34de3090740d0427abe5d201f608290447020/0_0_4313_5391/master/4313.jpg?width=620&dpr=1&s=none&crop=none",
+  "selected_image_alt": "A man in a pink shirt sits alone at a small table eating a meal on a sidewalk",
+  "width": 1400,
+  "height": 820,
+  "sha256": "ec1e02e6ae2a3fcc01aaeaea8500e760707fd4aa77520d032408dae9c76f84b2",
+  "publish_eligible": false,
+  "rights_note": "Internal editorial review evidence; republication rights require human review."
+}

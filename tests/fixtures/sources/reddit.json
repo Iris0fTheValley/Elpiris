@@ -18,7 +18,7 @@
   "language": "en",
   "video": {
     "kind": "video",
-    "fallback_url": "https://v.redd.it/urkrg4exhw6h1/DASH_720.mp4?source=fallback",
+    "fallback_url": "https://v.redd.it/urkrg4exhw6h1/CMAF_720.mp4?source=fallback",
     "thumbnail_url": "https://external-preview.redd.it/alright-brother-you-own-that-land-now-farmer-skips-patch-v0-bmFsMm5tNnhodzZoMaC6krmwUYgQEOCVgSu9-RCrxQYaVXmPgKbHbX7GxOY3.png?auto=webp&format=pjpg&s=6812d9cfeaf8aaa2c4f80189c3e31778986b32f0",
     "duration_ms": 34000,
     "bitrate_kbps": 2400

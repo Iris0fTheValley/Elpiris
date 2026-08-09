@@ -10,3 +10,8 @@
 
 API 的机器事实来源是 `frontend/openapi.json` 和
 `frontend/src/api/generated.ts`；Markdown 只补充业务语义，不替代生成契约。
+
+当前媒体质量文档：
+
+- `quality/live2d-motion.md`：Live2D 连续帧稳定性与验收。
+- `quality/source-evidence-and-media.md`：无广告证据卡、真实来源视频下载、断点续传与成片复现。

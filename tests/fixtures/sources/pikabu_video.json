@@ -1,0 +1,33 @@
+{
+  "source": "pikabu",
+  "story_id": "13922789",
+  "url": "https://pikabu.ru/story/v_peterburge_spasli_zamurovannoe_gnezdyishko_s_ptentsami_13922789",
+  "title": "В Петербурге спасли замурованное гнездышко с птенцами",
+  "author_username": "TvoiIstorik",
+  "published_at": "2026-04-27T14:46:03Z",
+  "language": "ru",
+  "publisher": "Pikabu",
+  "tags": ["Доброта", "Спасение животных", "Птицы", "Видео"],
+  "rating": 5,
+  "comments_count": 1,
+  "is_nsfw": false,
+  "rights": {
+    "status": "permission_required",
+    "copyright_holder": "TvoiIstorik / original uploader",
+    "terms_url": "https://pikabu.ru/information",
+    "allows_republication": null,
+    "allows_derivatives": null,
+    "requires_attribution": true
+  },
+  "blocks": [
+    {
+      "kind": "text",
+      "text": "Гнездо с птенцами на Большой Зелениной плотно закрыли строительной сеткой. Неравнодушные петербуржцы добились, чтобы сетку разрезали и вернули родителям доступ к птенцам."
+    },
+    {
+      "kind": "video",
+      "url": "https://cs16.pikabu.ru/s/2026/04/27/17/zoxx3sxj_s0f0d9m0_448x848.mp4",
+      "duration_ms": 9000
+    }
+  ]
+}

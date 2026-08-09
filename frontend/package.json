@@ -13,6 +13,7 @@
     "test:watch": "vitest",
     "test:e2e": "pnpm prepare:template-lab-assets && playwright test",
     "capture:template-lab": "pnpm prepare:template-lab-assets && node scripts/quality/capture-template-lab.mjs",
+    "capture:source-evidence": "node scripts/quality/capture-source-evidence.mjs",
     "build": "pnpm prepare:template-lab-assets && pnpm generate:openapi && tsc --noEmit && vite build",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build"
   },

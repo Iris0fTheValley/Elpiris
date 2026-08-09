@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "source": "guardian",
+  "canonical_url": "https://www.theguardian.com/lifeandstyle/2026/jul/27/the-kindness-of-strangers-when-mum-was-hospitalised-on-a-family-holiday-our-hotels-owners-were-heaven-sent",
+  "captured_at": "2026-08-09T17:22:54.948Z",
+  "capture_kind": "semantic_article_evidence",
+  "capture_transport": "live_browser",
+  "title": "The kindness of strangers: When Mum was hospitalised on a family holiday, our hotel’s owners were heaven-sent",
+  "selected_image_url": "https://i.guim.co.uk/img/media/ea80435065a0b2273aea3870fdede66df63fc504/345_0_4365_3731/master/4365.jpg?width=620&dpr=1&s=none&crop=none",
+  "selected_image_alt": "A child in a blue hoodie lies in bed with a green duvet and colorful pillows",
+  "width": 1400,
+  "height": 820,
+  "sha256": "7c9f758d86f23a023ddbdf4e56b236d0ab4c3d908fe9d6c0bc233b168e79811e",
+  "publish_eligible": false,
+  "rights_note": "Internal editorial review evidence; republication rights require human review."
+}

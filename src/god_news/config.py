@@ -98,6 +98,7 @@ class Settings(BaseSettings):
         le=2 * 1024 * 1024 * 1024,
     )
     source_media_probe_timeout_seconds: float = Field(default=30, gt=0, le=300)
+    source_media_download_attempts: int = Field(default=4, ge=1, le=10)
     source_media_asr_enabled: bool = False
     source_media_asr_model: str = Field(
         default="base",

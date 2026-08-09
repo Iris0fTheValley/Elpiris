@@ -499,7 +499,11 @@ async def build_container(settings: Settings) -> AppContainer:
             settings.source_media_root,
             max_download_bytes=settings.source_media_max_download_bytes,
         ),
-        downloader=HttpSourceMediaDownloader(http_client, policy),
+        downloader=HttpSourceMediaDownloader(
+            http_client,
+            policy,
+            max_attempts=settings.source_media_download_attempts,
+        ),
         inspector=(
             FFprobeSourceVideoInspector(
                 ffprobe,

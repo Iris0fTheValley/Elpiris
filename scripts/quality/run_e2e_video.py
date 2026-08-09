@@ -33,6 +33,7 @@ from god_news.domain.models import (
     AudioClip,
     CaptionVariant,
     EditorialScreening,
+    FetchedDocument,
     ProductionManifest,
     ScriptDocument,
     ScriptPreferences,
@@ -45,6 +46,7 @@ from god_news.domain.models import (
     TranslationResult,
     utc_now,
 )
+from god_news.domain.source_media import AcquireSourceMediaRequest, SourceMediaArtifact
 from god_news.domain.source_transcription import (
     TimedCaptionCue,
     TranscriptReview,
@@ -91,7 +93,8 @@ from god_news.operations.models import (
     RoleProfileCreate,
     RoleVisualAssets,
 )
-from god_news.sources.models import ActiveSourceName
+from god_news.sources.models import ActiveSourceName, NormalizedSourceItem, parse_raw_source_json
+from god_news.sources.registry import create_default_source_registry
 from god_news.video_errors import VideoRenderingError
 
 WORKSPACE = Path(__file__).resolve().parents[2]
@@ -108,7 +111,6 @@ class RealNewsStorySpec:
     caption_text: str
     source_captions: tuple[tuple[str, str], ...]
     category: ContentCategory
-    tone_hz: int
 
 
 APPROVED_NEWS_SOURCE_HOSTS: dict[ActiveSourceName, frozenset[str]] = {
@@ -141,7 +143,6 @@ REAL_NEWS_STORIES: tuple[RealNewsStorySpec, ...] = (
             ("He stayed until emergency responders arrived.", "他一直陪伴老人，直到救援人员抵达。"),
         ),
         category=ContentCategory.KINDNESS,
-        tone_hz=330,
     ),
     RealNewsStorySpec(
         source="guardian",
@@ -161,7 +162,6 @@ REAL_NEWS_STORIES: tuple[RealNewsStorySpec, ...] = (
             ("The anonymous kindness moved him deeply.", "这份匿名善意令他深受感动。"),
         ),
         category=ContentCategory.KINDNESS,
-        tone_hz=392,
     ),
     RealNewsStorySpec(
         source="guardian",
@@ -187,7 +187,6 @@ REAL_NEWS_STORIES: tuple[RealNewsStorySpec, ...] = (
             ("They also helped the family find accommodation.", "他们还帮助一家人解决住宿问题。"),
         ),
         category=ContentCategory.KINDNESS,
-        tone_hz=440,
     ),
     RealNewsStorySpec(
         source="pikabu",
@@ -207,7 +206,25 @@ REAL_NEWS_STORIES: tuple[RealNewsStorySpec, ...] = (
             ("Птиц передадут в Лапландский заповедник.", "小天鹅将被送往拉普兰自然保护区。"),
         ),
         category=ContentCategory.KINDNESS,
-        tone_hz=494,
+    ),
+    RealNewsStorySpec(
+        source="pikabu",
+        title="В Петербурге спасли замурованное гнездышко с птенцами",
+        source_url="https://pikabu.ru/story/v_peterburge_spasli_zamurovannoe_gnezdyishko_s_ptentsami_13922789",
+        source_language="ru",
+        original_text=(
+            "Гнездо с птенцами на Большой Зелениной плотно закрыли строительной сеткой. "
+            "Неравнодушные петербуржцы добились, чтобы сетку разрезали и вернули "
+            "родителям доступ к птенцам."
+        ),
+        spoken_text="工事用ネットに閉ざされた巣を、住民たちが見つけ、親鳥がひなのもとへ戻れるようにしました。",
+        caption_text="居民发现鸟巢被施工网封住，促成管理方割开网子，让亲鸟回到雏鸟身边。",
+        source_captions=(
+            ("Гнездо оказалось за строительной сеткой.", "鸟巢被封在施工网后。"),
+            ("Жители потребовали открыть доступ.", "居民们要求打开通道。"),
+            ("Мама-птица вернулась к птенцам.", "亲鸟重新回到雏鸟身边。"),
+        ),
+        category=ContentCategory.KINDNESS,
     ),
     RealNewsStorySpec(
         source="dazhong",
@@ -226,7 +243,6 @@ REAL_NEWS_STORIES: tuple[RealNewsStorySpec, ...] = (
             ("爱心餐一周内增加到每天近六十份。", "爱心餐一周内增加到每天近六十份。"),
         ),
         category=ContentCategory.KINDNESS,
-        tone_hz=523,
     ),
 )
 
@@ -339,15 +355,23 @@ def parse_args() -> argparse.Namespace:
     )
     parser.add_argument("--character", default="soyo")
     parser.add_argument("--speaker-id", default="dsakiko-soyo")
-    parser.add_argument("--source-duration-seconds", type=int, default=18)
     parser.add_argument("--live2d-size", type=int, default=512)
     parser.add_argument("--live2d-fps", type=int, default=30)
     parser.add_argument("--render-timeout-seconds", type=float, default=7_200)
     parser.add_argument("--render-concurrency", type=int, default=8)
     parser.add_argument("--render-attempts", type=int, default=2)
     parser.add_argument(
+        "--verified-source-report",
+        type=Path,
+        default=os.environ.get("GOD_NEWS_E2E_SOURCE_MEDIA_REPORT"),
+        help=(
+            "Optional report from verify_real_source_media.py. The immutable bytes and "
+            "ffprobe metadata are revalidated before reuse."
+        ),
+    )
+    parser.add_argument(
         "--title",
-        default="全球好消息系统演示 · 自制合法素材",
+        default="全球好消息系统演示 · 四源真实新闻",
     )
     return parser.parse_args()
 
@@ -358,6 +382,10 @@ def sha256_file(path: Path) -> str:
         for block in iter(lambda: source.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def resolve_existing(path: Path) -> Path:
+    return path.expanduser().resolve(strict=True)
 
 
 def discover_compositor_binary(workspace: Path, name: str) -> Path:
@@ -410,90 +438,6 @@ def write_evidence_wav(path: Path) -> None:
         output.setsampwidth(2)
         output.setframerate(16_000)
         output.writeframes(b"\0\0" * 16_000)
-
-
-async def generate_source_video(
-    *,
-    ffmpeg: Path,
-    path: Path,
-    duration_seconds: int,
-    image_path: Path,
-    screenshot_path: Path,
-    tone_hz: int,
-) -> None:
-    """Create one finite, project-owned documentary clip from reviewed rasters.
-
-    The two shots each have their own deterministic camera move and are joined
-    once. No short video is looped to manufacture duration.
-    """
-
-    path.parent.mkdir(parents=True, exist_ok=True)
-    first_duration = duration_seconds / 2
-    second_duration = duration_seconds - first_duration
-    first_frames = max(1, round(first_duration * 30))
-    second_frames = max(1, round(second_duration * 30))
-    transition_duration = min(1.0, first_duration / 4, second_duration / 4)
-    transition_offset = first_duration - transition_duration
-    filter_graph = (
-        f"[0:v]scale=1280:720:force_original_aspect_ratio=increase,"
-        f"crop=1280:720,scale=w='trunc((1280+120*n/{first_frames})/2)*2':"
-        f"h='trunc((720+68*n/{first_frames})/2)*2':eval=frame,"
-        "crop=1280:720,fps=30,setpts=PTS-STARTPTS,setsar=1/1[v0];"
-        f"[1:v]scale=1280:720:force_original_aspect_ratio=increase,"
-        f"crop=1280:720,scale=w='trunc((1400-120*n/{second_frames})/2)*2':"
-        f"h='trunc((788-68*n/{second_frames})/2)*2':eval=frame,"
-        "crop=1280:720,fps=30,setpts=PTS-STARTPTS,setsar=1/1[v1];"
-        f"[v0][v1]xfade=transition=fade:duration={transition_duration:.3f}:"
-        f"offset={transition_offset:.3f}[video]"
-    )
-    await run_process(
-        str(ffmpeg),
-        "-hide_banner",
-        "-loglevel",
-        "error",
-        "-y",
-        "-loop",
-        "1",
-        "-t",
-        f"{first_duration:.3f}",
-        "-i",
-        str(image_path),
-        "-loop",
-        "1",
-        "-t",
-        f"{second_duration:.3f}",
-        "-i",
-        str(screenshot_path),
-        "-f",
-        "lavfi",
-        "-i",
-        f"sine=frequency={tone_hz}:sample_rate=48000:duration={duration_seconds}",
-        "-filter_complex",
-        filter_graph,
-        "-map",
-        "[video]",
-        "-map",
-        "2:a",
-        "-t",
-        str(duration_seconds),
-        "-af",
-        "volume=0.035",
-        "-c:v",
-        "h264_mf",
-        "-b:v",
-        "5M",
-        "-pix_fmt",
-        "yuv420p",
-        "-c:a",
-        "aac",
-        "-b:a",
-        "96k",
-        "-movflags",
-        "+faststart",
-        str(path),
-        cwd=path.parent,
-        timeout_seconds=max(300, duration_seconds * 15),
-    )
 
 
 def ensure_role_request(
@@ -568,22 +512,27 @@ def build_story(
     speaker_id: str,
     source_audio: Path,
     index: int,
+    provenance: NormalizedSourceItem | None = None,
 ) -> tuple[Story, ProductionManifest]:
-    original_text = spec.original_text
+    original_text = provenance.content_text if provenance is not None else spec.original_text
     source_url = spec.source_url
     source_host = (urlparse(source_url).hostname or "").lower()
     if source_host not in APPROVED_NEWS_SOURCE_HOSTS[spec.source]:
         raise ValueError(
             f"E2E source URL host {source_host!r} does not match approved source {spec.source!r}."
         )
-    source = SourceSnapshot(
-        kind=SourceKind.URL,
-        source_uri=source_url,
-        final_uri=source_url,
-        title=spec.title,
-        detected_language=spec.source_language,
-        fetcher=f"source-contract:{spec.source}",
-        content_sha256=hashlib.sha256(original_text.encode("utf-8")).hexdigest(),
+    source = (
+        FetchedDocument.from_normalized_source(provenance).source
+        if provenance is not None
+        else SourceSnapshot(
+            kind=SourceKind.URL,
+            source_uri=source_url,
+            final_uri=source_url,
+            title=spec.title,
+            detected_language=spec.source_language,
+            fetcher=f"source-contract:{spec.source}",
+            content_sha256=hashlib.sha256(original_text.encode("utf-8")).hexdigest(),
+        )
     )
     segment = ScriptSegment(
         sequence=0,
@@ -644,6 +593,7 @@ def build_story(
         status=StoryStatus.PENDING_SECOND_REVIEW,
         title=spec.title,
         source=cast(SourceSnapshot, source),
+        provenance=provenance,
         original_text=original_text,
         target_language="zh-CN",
         preferences=ScriptPreferences(
@@ -752,8 +702,8 @@ async def approve_story_visuals(
             decision=ReviewDecision.APPROVE,
             reviewer_id="e2e-visual-reviewer",
             note=(
-                "Development-only approval of project-generated visual evidence for a "
-                "real-news source snapshot."
+                "Development-only approval of rights-gated visual evidence for a "
+                "real-news source snapshot; no publication permission is implied."
             ),
         ),
     )
@@ -790,67 +740,90 @@ def timed_source_captions(
     return cues
 
 
-async def build_source_assets(
+async def acquire_real_source_asset(
     *,
-    ffmpeg: Path,
+    container: AppContainer,
+    story: Story,
+    spec: RealNewsStorySpec,
     inspector: FFprobeSourceVideoInspector,
-    source_root: Path,
-    stories: Sequence[Story],
-    duration_seconds: int,
-    image_path: Path,
-    screenshot_path: Path,
-) -> list[SourceVideoRenderAsset]:
-    semaphore = asyncio.Semaphore(2)
-
-    async def build_one(
-        index: int,
-        story: Story,
-        spec: RealNewsStorySpec,
-    ) -> SourceVideoRenderAsset:
-        path = source_root / f"{index + 1:02d}-{story.story_id}.mp4"
-        async with semaphore:
-            await generate_source_video(
-                ffmpeg=ffmpeg,
-                path=path,
-                duration_seconds=duration_seconds,
-                image_path=image_path,
-                screenshot_path=screenshot_path,
-                tone_hz=spec.tone_hz,
-            )
-        probe = await inspector.inspect(path)
-        if probe.audio_codec is None:
-            raise RuntimeError("Generated source fixture is missing its original audio track.")
-        return SourceVideoRenderAsset(
-            asset_id=uuid4(),
-            story_id=story.story_id,
-            transcription_id=uuid4(),
-            transcription_version=2,
-            transcription_review=TranscriptReview(
-                reviewer_id="e2e-fixture-editor",
-                decision=TranscriptReviewDecision.APPROVE,
-                reviewed_version=1,
+    verified_source_report: Path | None,
+) -> tuple[SourceVideoRenderAsset, SourceMediaArtifact]:
+    if verified_source_report is None:
+        service = container.source_media
+        if service is None:
+            raise RuntimeError("Production source-media acquisition is unavailable.")
+        artifact = await service.acquire(
+            story.story_id,
+            AcquireSourceMediaRequest(
+                expected_story_version=story.version,
+                media_index=0,
+                requested_by="e2e-real-source-reviewer",
             ),
-            local_path=str(path.resolve()),
-            sha256=sha256_file(path),
-            size_bytes=path.stat().st_size,
-            duration_ms=probe.duration_ms,
-            width=probe.width,
-            height=probe.height,
-            in_ms=0,
-            out_ms=probe.duration_ms,
-            audio_mode=SourceVideoAudioMode.ORIGINAL,
-            source_label=f"Project-owned finite documentary clip · {spec.title}",
-            captions=timed_source_captions(spec, probe.duration_ms),
         )
-
-    return list(
-        await asyncio.gather(
-            *[
-                build_one(index, story, REAL_NEWS_STORIES[index])
-                for index, story in enumerate(stories)
-            ]
+        verified, path = await service.media_path(story.story_id, artifact.artifact_id)
+        if verified != artifact:
+            raise RuntimeError("Verified source-media evidence changed after acquisition.")
+    else:
+        report_path = await asyncio.to_thread(resolve_existing, verified_source_report)
+        report = json.loads(await asyncio.to_thread(report_path.read_text, encoding="utf-8"))
+        path = await asyncio.to_thread(resolve_existing, Path(report["local_path"]))
+        provenance = story.provenance
+        if provenance is None or not provenance.media or provenance.media[0].kind != "video":
+            raise RuntimeError("The real-video story is missing normalized video provenance.")
+        if report["canonical_story_url"] != str(provenance.canonical_url):
+            raise RuntimeError("Verified source report belongs to a different story.")
+        if report["source_url"] != str(provenance.media[0].url):
+            raise RuntimeError("Verified source report belongs to different media bytes.")
+        digest = await asyncio.to_thread(sha256_file, path)
+        size_bytes = (await asyncio.to_thread(path.stat)).st_size
+        if digest != report["sha256"] or size_bytes != report["size_bytes"]:
+            raise RuntimeError("Verified source report no longer matches the local media bytes.")
+        probe = await inspector.inspect(path)
+        if probe.model_dump(mode="json") != report["probe"]:
+            raise RuntimeError("Source media ffprobe metadata changed since verification.")
+        artifact = SourceMediaArtifact(
+            story_id=story.story_id,
+            source=provenance.source,
+            media_index=0,
+            acquired_by="e2e-revalidated-source-report",
+            source_url=provenance.media[0].url,
+            canonical_story_url=provenance.canonical_url,
+            attribution=provenance.attribution,
+            rights=provenance.rights,
+            publish_eligible=False,
+            content_type="video/mp4",
+            filename=path.name,
+            sha256=digest,
+            size_bytes=size_bytes,
+            probe=probe,
         )
+    if artifact.publish_eligible:
+        raise RuntimeError("The unlicensed Pikabu fixture must remain review-only.")
+    if artifact.probe.audio_codec is None:
+        raise RuntimeError("The real source video is missing its original audio track.")
+    render_asset = SourceVideoRenderAsset(
+        asset_id=artifact.artifact_id,
+        story_id=story.story_id,
+        transcription_id=uuid4(),
+        transcription_version=2,
+        transcription_review=TranscriptReview(
+            reviewer_id="e2e-real-source-reviewer",
+            decision=TranscriptReviewDecision.APPROVE,
+            reviewed_version=1,
+        ),
+        local_path=str(path),
+        sha256=artifact.sha256,
+        size_bytes=artifact.size_bytes,
+        duration_ms=artifact.probe.duration_ms,
+        width=artifact.probe.width,
+        height=artifact.probe.height,
+        in_ms=0,
+        out_ms=artifact.probe.duration_ms,
+        audio_mode=SourceVideoAudioMode.ORIGINAL,
+        source_label=artifact.attribution.attribution_text,
+        captions=timed_source_captions(spec, artifact.probe.duration_ms),
     )
+    return render_asset, artifact
 
 
 def visual_review_times(batch: VideoBatch) -> list[tuple[str, float]]:
@@ -1352,6 +1325,7 @@ def build_report(
     batch: VideoBatch,
     artifact: VideoRenderArtifact,
     source_assets: Sequence[SourceVideoRenderAsset],
+    source_media_artifacts: Sequence[SourceMediaArtifact],
     frame_paths: dict[str, dict[str, object]],
     layer_comparison: dict[str, object],
     source_commit: str,
@@ -1399,12 +1373,15 @@ def build_report(
             {
                 **asset.model_dump(mode="json", exclude={"local_path"}),
                 "local_path": asset.local_path,
-                "creator": "god-news project-owned demo asset pipeline",
-                "rights_status": "project_owned_ai_assisted_demo",
-                "attribution_required": False,
+                "canonical_story_url": str(media.canonical_story_url),
+                "source_url": str(media.source_url),
+                "retrieved_at": media.retrieved_at.isoformat(),
+                "rights_status": media.rights.status,
+                "publish_eligible": media.publish_eligible,
+                "attribution_required": media.rights.requires_attribution,
                 "looped_source_video": False,
             }
-            for asset in source_assets
+            for asset, media in zip(source_assets, source_media_artifacts, strict=True)
         ],
         "host_assets": [
             asset.model_dump(mode="json")
@@ -1423,8 +1400,6 @@ async def main() -> None:
             "--dsakiko-root or GOD_NEWS_E2E_DSAKIKO_ROOT is required for real Live2D/TTS."
         )
     dsakiko_root = args.dsakiko_root.expanduser().resolve(strict=True)
-    if args.source_duration_seconds < 10 or args.source_duration_seconds > 30:
-        raise SystemExit("--source-duration-seconds must stay between 10 and 30.")
     if args.live2d_size % 2:
         raise SystemExit("--live2d-size must be even.")
     if args.render_attempts < 1 or args.render_attempts > 3:
@@ -1455,7 +1430,6 @@ async def main() -> None:
             "memory_chroma_persist_directory": runtime_root / "chroma",
         }
     )
-    source_root = run_root / "source-videos"
     render_root = run_root / "renders"
     live2d_root = run_root / "live2d"
     frame_root = run_root / "visual-review"
@@ -1470,8 +1444,19 @@ async def main() -> None:
         (snapshot_root / "guardian-fathers-day.png").resolve(strict=True),
         (snapshot_root / "guardian-hotel-kindness.png").resolve(strict=True),
         (snapshot_root / "pikabu-swan-rescue.png").resolve(strict=True),
+        (snapshot_root / "pikabu-nest-rescue.png").resolve(strict=True),
         (snapshot_root / "dazhong-free-meals.png").resolve(strict=True),
     ]
+    real_video_provenance: NormalizedSourceItem = create_default_source_registry().normalize(
+        parse_raw_source_json(
+            (WORKSPACE / "tests" / "fixtures" / "sources" / "pikabu_video.json").read_bytes()
+        )
+    )
+    real_video_index = next(
+        index
+        for index, spec in enumerate(REAL_NEWS_STORIES)
+        if str(real_video_provenance.canonical_url) == spec.source_url
+    )
 
     ffmpeg = (dsakiko_root / "GPT_SoVITS" / "ffmpeg.exe").resolve(strict=True)
     ffprobe = discover_compositor_binary(WORKSPACE, "ffprobe")
@@ -1496,6 +1481,7 @@ async def main() -> None:
                 speaker_id=role.speaker_id,
                 source_audio=source_audio,
                 index=index,
+                provenance=(real_video_provenance if index == real_video_index else None),
             )
             created = await container.repository.create(story)
             approved = await approve_story_visuals(
@@ -1512,15 +1498,14 @@ async def main() -> None:
                 approved.story_id
             )
 
-        source_assets = await build_source_assets(
-            ffmpeg=ffmpeg,
+        source_asset, source_media_artifact = await acquire_real_source_asset(
+            container=container,
+            story=stories[real_video_index],
+            spec=REAL_NEWS_STORIES[real_video_index],
             inspector=inspector,
-            source_root=source_root,
-            stories=stories[:1],
-            duration_seconds=args.source_duration_seconds,
-            image_path=image_path,
-            screenshot_path=story_screenshots[0],
+            verified_source_report=args.verified_source_report,
         )
+        source_assets = [source_asset]
         if not isinstance(container.generator, OpenAICompatibleTextGenerator):
             raise RuntimeError("A configured OpenAI-compatible LLM is required.")
         director = RequiredDemoPolicyDirector(
@@ -1581,7 +1566,7 @@ async def main() -> None:
         batch = await service.create(
             CreateVideoBatch(
                 title=args.title,
-                subtitle="日语本地口播 · 中文字幕 · 已审核项目自有视觉素材",
+                subtitle="日语本地口播 · 中文字幕 · 已审核真实来源素材",
                 story_ids=[story.story_id for story in stories],
                 max_stories=len(stories),
             )
@@ -1688,6 +1673,7 @@ async def main() -> None:
             batch=batch,
             artifact=batch.artifact,
             source_assets=source_assets,
+            source_media_artifacts=[source_media_artifact],
             frame_paths=frames,
             layer_comparison=layer_comparison,
             source_commit=source_commit,

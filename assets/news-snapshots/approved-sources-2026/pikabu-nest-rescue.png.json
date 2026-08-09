@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "source": "pikabu",
+  "canonical_url": "https://pikabu.ru/story/v_peterburge_spasli_zamurovannoe_gnezdyishko_s_ptentsami_13922789",
+  "captured_at": "2026-08-09T17:46:31.813Z",
+  "capture_kind": "semantic_article_evidence",
+  "capture_transport": "normalized_source_fixture",
+  "title": "В Петербурге спасли замурованное гнездышко с птенцами",
+  "selected_image_url": null,
+  "selected_image_alt": null,
+  "width": 1400,
+  "height": 820,
+  "sha256": "8413f5b0620c85af3c28004984c133b2f5644edecc1cc7dc1e12e0c9b754ab05",
+  "publish_eligible": false,
+  "rights_note": "Internal editorial review evidence; republication rights require human review."
+}
