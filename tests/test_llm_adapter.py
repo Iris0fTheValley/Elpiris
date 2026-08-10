@@ -123,6 +123,8 @@ async def test_deepseek_payload_disables_thinking_and_validates_json() -> None:
     )
     assert cached == result
     create.assert_awaited_once()
+    await generator.healthcheck()
+    list_models.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -20,6 +20,7 @@ def test_blank_optional_secrets_and_weight_paths_are_unset(tmp_path: Path) -> No
     )
     assert settings.deepseek_api_key is None
     assert settings.llm_response_cache_entries == 256
+    assert settings.llm_healthcheck_cache_seconds == 60
     assert settings.jina_api_key is None
     assert settings.tts_gpt_weights is None
     assert settings.tts_sovits_weights is None

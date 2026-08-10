@@ -179,6 +179,64 @@ async def test_source_run_persists_progress_and_deduplicates_items(stack: Stack)
 
 
 @pytest.mark.asyncio
+async def test_source_run_archives_ai_rejected_candidate_before_review(stack: Stack) -> None:
+    original_translate = stack.generator.translate_and_summarize
+
+    async def reject_candidate(**kwargs):  # type: ignore[no-untyped-def]
+        translated = await original_translate(**kwargs)
+        return translated.model_copy(
+            update={
+                "screening": translated.screening.model_copy(
+                    update={
+                        "model_candidate_recommendation": False,
+                        "candidate_recommendation": False,
+                        "rationale": "The source is not suitable for the good-news programme.",
+                    }
+                )
+            }
+        )
+
+    stack.generator.translate_and_summarize = reject_candidate  # type: ignore[method-assign]
+    service = SourceRunService(
+        repository=InMemorySourceRunRepository(),
+        collectors=StaticCollectorGateway(
+            SourceCollectionRun(
+                source="guardian",
+                outcome="succeeded",
+                duration_ms=1,
+                items=[GUARDIAN_FIXTURE],
+            )
+        ),
+        normalizer=stack.container.source_normalizers,
+        admission_policy=ContentAdmissionPolicy(),
+        ingestor=stack.workflow,
+    )
+
+    started = await service.start(
+        SourceRunRequest(source="guardian", requested_by="test-editor"),
+        trace_id=uuid4(),
+    )
+    completed = await service.wait(started.run_id)
+
+    assert completed.status is SourceRunStatus.COMPLETED
+    assert completed.ingested_count == 0
+    assert completed.filtered_count == 1
+    assert completed.item_results[0].error_code == "editorial_not_recommended"
+    assert completed.item_results[0].story_id is not None
+    assert await stack.workflow.list(limit=10, offset=0) == []
+    archived = await stack.workflow.list(
+        status=StoryStatus.ARCHIVED,
+        limit=10,
+        offset=0,
+        include_archived=True,
+    )
+    assert len(archived) == 1
+    assert archived[0].translation is not None
+    assert archived[0].translation.screening.candidate_recommendation is False
+    await service.aclose()
+
+
+@pytest.mark.asyncio
 async def test_source_run_exposes_sanitized_current_item_while_ingesting(stack: Stack) -> None:
     item = RawGuardianItem.model_validate(
         {

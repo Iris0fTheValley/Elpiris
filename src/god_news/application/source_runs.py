@@ -8,6 +8,7 @@ from functools import partial
 from urllib.parse import urlsplit, urlunsplit
 from uuid import UUID
 
+from god_news.domain.enums import StoryStatus
 from god_news.domain.models import SourceItemIngestRequest
 from god_news.errors import DuplicateStoryError, GodNewsError
 from god_news.logging import reset_trace_id, set_trace_id
@@ -348,11 +349,19 @@ class SourceRunService:
                     error_code="internal_error",
                 )
             else:
-                result = SourceItemIngestionResult(
-                    external_id=normalized.external_id,
-                    outcome=SourceItemIngestionOutcome.INGESTED,
-                    story_id=story.story_id,
-                )
+                if story.status is StoryStatus.ARCHIVED:
+                    result = SourceItemIngestionResult(
+                        external_id=normalized.external_id,
+                        outcome=SourceItemIngestionOutcome.FILTERED,
+                        story_id=story.story_id,
+                        error_code="editorial_not_recommended",
+                    )
+                else:
+                    result = SourceItemIngestionResult(
+                        external_id=normalized.external_id,
+                        outcome=SourceItemIngestionOutcome.INGESTED,
+                        story_id=story.story_id,
+                    )
             run = await self._save_update(
                 run,
                 item_results=[*run.item_results, result],

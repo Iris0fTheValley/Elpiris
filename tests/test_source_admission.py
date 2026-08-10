@@ -95,6 +95,34 @@ def test_dazhong_benign_news_is_not_rejected_by_body_scan() -> None:
     assert ContentAdmissionPolicy().evaluate(item).accepted is True
 
 
+def test_dazhong_rejects_real_world_military_and_sports_headlines() -> None:
+    base = RawDazhongItem.model_validate_json(
+        (Path(__file__).parent / "fixtures" / "sources" / "dazhong.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    registry = create_default_source_registry()
+    military = registry.normalize(
+        base.model_copy(
+            update={
+                "title": "美国导弹库存亮起红灯 白宫与五角大楼如何破局",
+                "body": "美国国防部讨论武器弹药库存和军事冲突。",
+            }
+        )
+    )
+    sports = registry.normalize(
+        base.model_copy(
+            update={
+                "title": "齐鲁超赛第十三轮五佳球由你定",
+                "body": "常规赛五场比赛产生十四粒进球,球迷可投票。",
+            }
+        )
+    )
+
+    assert ContentAdmissionPolicy().evaluate(military).error_code == "excluded_topic_politics"
+    assert ContentAdmissionPolicy().evaluate(sports).error_code == "excluded_topic_sports"
+
+
 def test_guardian_query_adds_documented_negative_search_terms() -> None:
     query = guardian_query_with_exclusions("kindness")
 

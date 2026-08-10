@@ -697,6 +697,18 @@ class StoryWorkflow:
                 transition_reason="translation completed",
             )
             checkpoint = translated
+            if (
+                translated.provenance is not None
+                and not translation.screening.candidate_recommendation
+            ):
+                archived = transition_story(translated, StoryStatus.ARCHIVED)
+                archived = await self._repository.save(
+                    archived,
+                    expected_version=translated.version,
+                    transition_reason="automated source screening rejected candidate",
+                )
+                logger.info("source candidate archived before human review")
+                return archived
             pending = transition_story(translated, StoryStatus.PENDING_FIRST_REVIEW)
             pending = await self._repository.save(
                 pending,
