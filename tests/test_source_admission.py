@@ -37,11 +37,18 @@ def test_admission_rejects_excluded_sections_and_editorial_topics() -> None:
     localized_sports_tag = policy.evaluate(
         _normalized(section_id="news", tags=["国际体育新闻"])
     )
+    local_government = policy.evaluate(
+        _normalized(
+            section_id="news",
+            web_title="推动新就业群体融入基层治理",
+        )
+    )
 
     assert politics.error_code == "excluded_topic_politics"
     assert sports.error_code == "excluded_topic_sports"
     assert mixed_digest.error_code == "excluded_topic_politics"
     assert localized_sports_tag.error_code == "excluded_topic_sports"
+    assert local_government.error_code == "excluded_topic_politics"
 
 
 def test_admission_accepts_benign_story_with_incidental_body_reference() -> None:
@@ -123,9 +130,95 @@ def test_dazhong_rejects_real_world_military_and_sports_headlines() -> None:
     assert ContentAdmissionPolicy().evaluate(sports).error_code == "excluded_topic_sports"
 
 
+def test_admission_rejects_disaster_adoption_corruption_and_routine_technology() -> None:
+    policy = ContentAdmissionPolicy()
+    cases = {
+        "A typhoon warning is in force after severe flooding": "excluded_topic_disaster",
+        "Friendly rescue dog is looking for a forever home": "excluded_topic_adoption",
+        "Former official convicted of accepting bribes": "excluded_topic_corruption",
+        "New artificial intelligence platform launches for retailers": (
+            "excluded_topic_minor_technology"
+        ),
+    }
+
+    for title, expected_code in cases.items():
+        assert policy.evaluate(_normalized(web_title=title)).error_code == expected_code
+
+
+def test_admission_allows_only_explicitly_major_technology_achievement() -> None:
+    policy = ContentAdmissionPolicy()
+    major = _normalized(
+        web_title="World-first medical technology marks a major breakthrough",
+        trail_text="Researchers published independently reviewed results.",
+    )
+    routine = _normalized(
+        web_title="Agricultural technology platform expands to another district",
+    )
+    dazhong_base = RawDazhongItem.model_validate_json(
+        (Path(__file__).parent / "fixtures" / "sources" / "dazhong.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    major_chinese = create_default_source_registry().normalize(
+        dazhong_base.model_copy(
+            update={
+                "title": "新矿物+1!我国首个,正式获批",
+                "body": "我国科研团队确认一种新矿物,形成重大科学发现。",
+            }
+        )
+    )
+
+    assert policy.evaluate(major).accepted is True
+    assert policy.evaluate(major_chinese).accepted is True
+    assert policy.evaluate(routine).error_code == "excluded_topic_minor_technology"
+
+
+def test_dazhong_body_scan_rejects_generic_disaster_and_corruption_roundups() -> None:
+    base = RawDazhongItem.model_validate_json(
+        (Path(__file__).parent / "fixtures" / "sources" / "dazhong.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    registry = create_default_source_registry()
+    disaster = registry.normalize(
+        base.model_copy(update={"title": "今日简报", "body": "多地启动洪水防御响应。"})
+    )
+    corruption = registry.normalize(
+        base.model_copy(update={"title": "今日简报", "body": "某干部因受贿被判刑。"})
+    )
+
+    assert ContentAdmissionPolicy().evaluate(disaster).error_code == "excluded_topic_disaster"
+    assert ContentAdmissionPolicy().evaluate(corruption).error_code == "excluded_topic_corruption"
+
+
+def test_dazhong_body_scan_rejects_routine_agricultural_technology() -> None:
+    base = RawDazhongItem.model_validate_json(
+        (Path(__file__).parent / "fixtures" / "sources" / "dazhong.json").read_text(
+            encoding="utf-8"
+        )
+    )
+    item = create_default_source_registry().normalize(
+        base.model_copy(
+            update={
+                "title": "来自田间的三本账",
+                "body": "当地扩大水肥一体化应用,提高农业生产效率。",
+            }
+        )
+    )
+
+    assert (
+        ContentAdmissionPolicy().evaluate(item).error_code
+        == "excluded_topic_minor_technology"
+    )
+
+
 def test_guardian_query_adds_documented_negative_search_terms() -> None:
     query = guardian_query_with_exclusions("kindness")
 
     assert query.startswith("(kindness) AND NOT (")
     assert "politics" in query
     assert "football" in query
+    assert "disaster" in query
+    assert "adoption" in query
+    assert "bribery" in query
+    assert "technology" not in query

@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from weakref import WeakValueDictionary
 
 from god_news.application.memory import MemoryCoordinator
-from god_news.domain.enums import ReviewDecision, ReviewStage, StoryStatus
+from god_news.domain.enums import ReviewDecision, ReviewStage, SourceKind, StoryStatus
 from god_news.domain.fsm import transition_story
 from god_news.domain.models import (
     AudioBundle,
@@ -698,7 +698,7 @@ class StoryWorkflow:
             )
             checkpoint = translated
             if (
-                translated.provenance is not None
+                translated.source.kind is not SourceKind.TEXT
                 and not translation.screening.candidate_recommendation
             ):
                 archived = transition_story(translated, StoryStatus.ARCHIVED)

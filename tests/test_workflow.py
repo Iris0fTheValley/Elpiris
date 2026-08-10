@@ -5,7 +5,7 @@ from uuid import uuid4
 
 import pytest
 
-from god_news.domain.enums import ContentCategory, ReviewDecision, StoryStatus
+from god_news.domain.enums import ContentCategory, ReviewDecision, SourceKind, StoryStatus
 from god_news.domain.fsm import transition_story
 from god_news.domain.models import (
     FirstReviewSubmission,
@@ -16,6 +16,7 @@ from god_news.domain.models import (
     SecondReviewSubmission,
     SynthesizeStoryRequest,
     TextSource,
+    UrlSource,
 )
 from god_news.errors import (
     ArtifactNotReadyError,
@@ -43,6 +44,15 @@ def ingest_request() -> IngestRequest:
         style="accurate narration",
         target_duration_seconds=60,
     )
+
+
+class StaticUrlFetcher:
+    def __init__(self, document):  # type: ignore[no-untyped-def]
+        self._document = document
+
+    async def fetch(self, source):  # type: ignore[no-untyped-def]
+        del source
+        return self._document
 
 
 async def _approve_first_review(stack: Stack, story_id, version: int):  # type: ignore[no-untyped-def]
@@ -134,6 +144,53 @@ async def test_complete_review_gated_pipeline(stack: Stack) -> None:
     assert len(await stack.workflow.reviews(story.story_id)) == 3
     assert stack.memory.writes
     assert all(memory.approved for memory in stack.memory.writes)
+
+
+@pytest.mark.asyncio
+async def test_ai_rejected_url_is_archived_before_review(stack: Stack) -> None:
+    fetched = await stack.container.fetcher.fetch(
+        TextSource(
+            title="美国导弹库存亮起红灯",
+            language="zh-CN",
+            text="这是一篇有关军事与政治的真实新闻正文。",
+        )
+    )
+    fetched = fetched.model_copy(
+        update={
+            "source": fetched.source.model_copy(
+                update={
+                    "kind": SourceKind.URL,
+                    "source_uri": "https://m.dzplus.dzng.com/share/general/0/NEWS3597800",
+                    "final_uri": "https://m.dzplus.dzng.com/share/general/0/NEWS3597800",
+                    "fetcher": "test-static-url",
+                }
+            )
+        }
+    )
+    stack.workflow._fetcher = StaticUrlFetcher(fetched)  # type: ignore[assignment]
+    original_translate = stack.generator.translate_and_summarize
+
+    async def reject_candidate(**kwargs):  # type: ignore[no-untyped-def]
+        translated = await original_translate(**kwargs)
+        return translated.model_copy(
+            update={
+                "screening": translated.screening.model_copy(
+                    update={
+                        "model_candidate_recommendation": False,
+                        "candidate_recommendation": False,
+                    }
+                )
+            }
+        )
+
+    stack.generator.translate_and_summarize = reject_candidate  # type: ignore[method-assign]
+
+    story = await stack.workflow.ingest(
+        IngestRequest(source=UrlSource(url="https://m.dzplus.dzng.com/share/general/0/NEWS3597800"))
+    )
+
+    assert story.status is StoryStatus.ARCHIVED
+    assert await stack.workflow.list(limit=10, offset=0) == []
 
 
 @pytest.mark.asyncio

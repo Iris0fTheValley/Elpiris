@@ -12,7 +12,14 @@ from god_news.sources.models import (
     RedditSourceFields,
 )
 
-ExcludedTopic = Literal["politics", "sports"]
+ExcludedTopic = Literal[
+    "politics",
+    "sports",
+    "disaster",
+    "adoption",
+    "corruption",
+    "minor_technology",
+]
 
 
 @dataclass(frozen=True, slots=True)
@@ -117,7 +124,17 @@ _POLITICS_PHRASES = (
     "军方",
     "美军",
     "核政策",
+    "核武",
+    "拥核",
     "右翼政客",
+    "军校",
+    "大校",
+    "基层治理",
+    "基层实践",
+    "党建",
+    "援疆",
+    "позывной",
+    "на передовой",
 )
 _SPORTS_PHRASES = (
     "football",
@@ -163,6 +180,143 @@ _SPORTS_PHRASES = (
     "超赛",
 )
 
+_DISASTER_PHRASES = (
+    "disaster",
+    "earthquake",
+    "tsunami",
+    "hurricane",
+    "typhoon",
+    "tornado",
+    "wildfire",
+    "landslide",
+    "flash flood",
+    "flood warning",
+    "storm warning",
+    "стихийн",
+    "землетряс",
+    "цунами",
+    "наводнен",
+    "тайфун",
+    "ураган",
+    "台风",
+    "暴雨",
+    "洪水",
+    "山洪",
+    "地震",
+    "海啸",
+    "灾害",
+    "内涝",
+    "山体滑坡",
+    "泥石流",
+    "山火",
+)
+
+_ADOPTION_PHRASES = (
+    "for adoption",
+    "adopt a",
+    "adopt this",
+    "adopted from",
+    "looking for a home",
+    "looking for a family",
+    "forever home",
+    "needs a home",
+    "animal shelter",
+    "pet shelter",
+    "в добрые руки",
+    "ищет дом",
+    "ищет семью",
+    "приют для животных",
+    "попал в приют",
+    "живёт в приюте",
+    "领养",
+    "送养",
+    "收养",
+    "寻找新主人",
+    "寻找温暖的家",
+    "寻找家庭",
+    "宠物收容所",
+    "收容所",
+)
+
+_CORRUPTION_PHRASES = (
+    "bribery",
+    "accepted bribes",
+    "accepting bribes",
+    "taking bribes",
+    "corruption probe",
+    "corruption investigation",
+    "graft charges",
+    "embezzlement",
+    "взятк",
+    "коррупц",
+    "受贿",
+    "行贿",
+    "贪污",
+    "腐败",
+    "违纪违法",
+    "涉嫌严重违纪",
+)
+
+_TECHNOLOGY_PHRASES = (
+    "artificial intelligence",
+    "generative ai",
+    "large language model",
+    "foundation model",
+    "robotics",
+    "robot",
+    "technology",
+    "tech company",
+    "software platform",
+    "digital platform",
+    "app launch",
+    "product launch",
+    "ai",
+    "искусственный интеллект",
+    "робот",
+    "технолог",
+    "人工智能",
+    "大模型",
+    "机器人",
+    "科技",
+    "技术",
+    "智能化",
+    "数字化",
+    "算法",
+    "芯片",
+    "开放平台",
+    "技术应用",
+    "科技成果",
+    "农业科技",
+    "农业技术",
+    "水肥一体化",
+    "数字农业",
+)
+
+_MAJOR_TECHNOLOGY_PHRASES = (
+    "major breakthrough",
+    "scientific breakthrough",
+    "medical breakthrough",
+    "landmark discovery",
+    "world first",
+    "world-first",
+    "first ever",
+    "first-ever",
+    "впервые в мире",
+    "научный прорыв",
+    "крупный прорыв",
+    "重大突破",
+    "突破性成果",
+    "重大科技成果",
+    "重大科学发现",
+    "世界首次",
+    "全球首次",
+    "全球首个",
+    "我国首个",
+    "首次发现",
+    "新矿物",
+    "里程碑成果",
+)
+
 _DAZHONG_POLITICS_BODY_PHRASES = (
     "台独",
     "台军",
@@ -184,6 +338,19 @@ _DAZHONG_POLITICS_BODY_PHRASES = (
     "美国国防部",
     "军事冲突",
     "武器弹药",
+    "核武",
+    "拥核",
+    "军校",
+    "基层治理",
+    "基层实践",
+    "党建",
+    "援疆",
+    "市委",
+    "市政府",
+    "县委",
+    "县政府",
+    "党委",
+    "党支部",
 )
 _DAZHONG_SPORTS_BODY_PHRASES = (
     "足球赛",
@@ -209,6 +376,38 @@ _DAZHONG_SPORTS_BODY_PHRASES = (
     "wtt",
 )
 
+_DAZHONG_DISASTER_BODY_PHRASES = (
+    "台风预警",
+    "暴雨预警",
+    "洪水防御",
+    "防汛应急响应",
+    "山洪灾害",
+    "地震灾害",
+    "地质灾害",
+    "城市内涝",
+)
+
+_DAZHONG_CORRUPTION_BODY_PHRASES = (
+    "受贿",
+    "行贿",
+    "贪污",
+    "违纪违法",
+    "涉嫌严重违纪",
+)
+
+_DAZHONG_TECHNOLOGY_BODY_PHRASES = (
+    "人工智能",
+    "大模型",
+    "机器人",
+    "农业科技",
+    "农业技术",
+    "水肥一体化",
+    "数字农业",
+    "科技成果",
+    "芯片研发",
+    "算法平台",
+)
+
 _GUARDIAN_QUERY_EXCLUSIONS = (
     "politics",
     "election",
@@ -223,6 +422,17 @@ _GUARDIAN_QUERY_EXCLUSIONS = (
     '"premier league"',
     '"world cup"',
     "olympic",
+    "disaster",
+    "earthquake",
+    "tsunami",
+    "hurricane",
+    "typhoon",
+    "flood",
+    "wildfire",
+    "adoption",
+    '"animal shelter"',
+    "bribery",
+    "corruption",
 )
 
 
@@ -251,15 +461,36 @@ class ContentAdmissionPolicy:
             return SourceAdmissionDecision(accepted=False, topic="politics")
         if self._contains_phrase(editorial_text, _SPORTS_PHRASES):
             return SourceAdmissionDecision(accepted=False, topic="sports")
+        full_text = f"{editorial_text} {item.content_text.casefold()}"
+        if self._contains_phrase(full_text, _DISASTER_PHRASES):
+            return SourceAdmissionDecision(accepted=False, topic="disaster")
+        if self._contains_phrase(full_text, _ADOPTION_PHRASES):
+            return SourceAdmissionDecision(accepted=False, topic="adoption")
+        if self._contains_phrase(full_text, _CORRUPTION_PHRASES):
+            return SourceAdmissionDecision(accepted=False, topic="corruption")
+        if self._contains_phrase(editorial_text, _TECHNOLOGY_PHRASES) and not self._contains_phrase(
+            editorial_text,
+            _MAJOR_TECHNOLOGY_PHRASES,
+        ):
+            return SourceAdmissionDecision(accepted=False, topic="minor_technology")
         if isinstance(item.source_fields, DazhongSourceFields):
             # Dazhong's public pages often use a generic channel and omit tags. Scan
-            # only strong, unambiguous body markers so mixed political/sports
-            # roundups cannot enter the editorial queue.
+            # only strong, unambiguous body markers so mixed or vaguely titled
+            # excluded-topic roundups cannot enter the editorial queue.
             body = item.content_text.casefold()
             if self._contains_phrase(body, _DAZHONG_POLITICS_BODY_PHRASES):
                 return SourceAdmissionDecision(accepted=False, topic="politics")
             if self._contains_phrase(body, _DAZHONG_SPORTS_BODY_PHRASES):
                 return SourceAdmissionDecision(accepted=False, topic="sports")
+            if self._contains_phrase(body, _DAZHONG_DISASTER_BODY_PHRASES):
+                return SourceAdmissionDecision(accepted=False, topic="disaster")
+            if self._contains_phrase(body, _DAZHONG_CORRUPTION_BODY_PHRASES):
+                return SourceAdmissionDecision(accepted=False, topic="corruption")
+            if self._contains_phrase(
+                body,
+                _DAZHONG_TECHNOLOGY_BODY_PHRASES,
+            ) and not self._contains_phrase(body, _MAJOR_TECHNOLOGY_PHRASES):
+                return SourceAdmissionDecision(accepted=False, topic="minor_technology")
         return SourceAdmissionDecision(accepted=True)
 
     @staticmethod
