@@ -17,6 +17,7 @@ from god_news.sources.collectors.public_pages import (
     PikabuPublicPageCollector,
 )
 from god_news.sources.collectors.reddit import RedditOAuthCollector
+from god_news.sources.normalizers.reddit import RedditSourceNormalizer
 
 
 def _document(
@@ -152,6 +153,162 @@ async def test_reddit_collector_uses_oauth_and_sanitizes_run_telemetry() -> None
     assert secret not in serialized
     assert token not in serialized
     assert token not in diagnostic.model_dump_json()
+
+
+@pytest.mark.asyncio
+async def test_reddit_pagination_deduplicates_and_preserves_post_media_text_and_link() -> None:
+    listing_queries: list[dict[str, str]] = []
+
+    def post(post_id: str, **fields: object) -> dict[str, object]:
+        return {
+            "kind": "t3",
+            "data": {
+                "id": post_id,
+                "permalink": f"/r/HumansBeingBros/comments/{post_id}/story/",
+                "title": f"Story {post_id}",
+                "created_utc": 1_783_700_000,
+                "subreddit": "HumansBeingBros",
+                **fields,
+            },
+        }
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        if request.url.path == "/api/v1/access_token":
+            return httpx.Response(200, json={"access_token": "token", "expires_in": 3600})
+        assert request.headers["Authorization"] == "Bearer token"
+        listing_queries.append(dict(request.url.params))
+        if "after" not in request.url.params:
+            return httpx.Response(
+                200,
+                json={
+                    "data": {
+                        "after": "t3_b",
+                        "children": [
+                            post(
+                                "a",
+                                secure_media={
+                                    "reddit_video": {
+                                        "fallback_url": "https://v.redd.it/clip/DASH_720.mp4",
+                                        "duration": 8,
+                                    }
+                                },
+                            ),
+                            post("b", selftext="A volunteer helped.", is_self=True),
+                        ],
+                    }
+                },
+            )
+        assert request.url.params["after"] == "t3_b"
+        return httpx.Response(
+            200,
+            json={
+                "data": {
+                    "after": "t3_c",
+                    "children": [
+                        post("b", selftext="Duplicate should not replace first."),
+                        post(
+                            "c",
+                            selftext="Useful post summary.",
+                            is_self=False,
+                            url_overridden_by_dest="https://example.org/article",
+                        ),
+                    ],
+                }
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        collector = RedditOAuthCollector(
+            client=client,
+            endpoint="https://oauth.reddit.com/",
+            token_endpoint="https://www.reddit.com/api/v1/access_token",
+            client_id=SecretStr("client"),
+            client_secret=SecretStr("secret"),
+            user_agent="god-news-test/1.0",
+            enabled=True,
+            api_use_authorized=True,
+            subreddit="HumansBeingBros",
+            default_limit=3,
+        )
+        run = await collector.collect()
+
+    assert run.outcome == "succeeded"
+    assert [item.post_id for item in run.items] == ["a", "b", "c"]
+    assert listing_queries == [
+        {"limit": "3", "raw_json": "1"},
+        {"limit": "1", "raw_json": "1", "after": "t3_b"},
+    ]
+    assert [attempt.item_count for attempt in run.attempts if attempt.operation == "listing"] == [
+        2,
+        2,
+    ]
+    normalizer = RedditSourceNormalizer()
+    first = normalizer.normalize(run.items[0])
+    second = normalizer.normalize(run.items[1])
+    third = normalizer.normalize(run.items[2])
+    assert first.flags.has_video is True
+    assert str(first.media[-1].url) == "https://v.redd.it/clip/DASH_720.mp4"
+    assert second.content_text == "A volunteer helped."
+    assert third.content_text == "Useful post summary."
+    assert str(third.source_fields.outbound_url) == "https://example.org/article"
+    assert third.rights.requires_human_review is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("stop", ["rate", "cursor", "error"])
+async def test_reddit_pagination_stops_on_rate_cursor_or_http_error(stop: str) -> None:
+    listing_calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal listing_calls
+        if request.url.path == "/api/v1/access_token":
+            return httpx.Response(200, json={"access_token": "token"})
+        listing_calls += 1
+        if stop == "error" and listing_calls == 2:
+            return httpx.Response(429)
+        return httpx.Response(
+            200,
+            headers={"X-Ratelimit-Remaining": "0" if stop == "rate" else "10"},
+            json={
+                "data": {
+                    "after": "t3_a",
+                    "children": [
+                        {
+                            "kind": "t3",
+                            "data": {
+                                "id": "a",
+                                "permalink": "/r/HumansBeingBros/comments/a/story/",
+                                "title": "Story a",
+                                "created_utc": 1_783_700_000,
+                                "subreddit": "HumansBeingBros",
+                            },
+                        }
+                    ],
+                }
+            },
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        collector = RedditOAuthCollector(
+            client=client,
+            endpoint="https://oauth.reddit.com/",
+            token_endpoint="https://www.reddit.com/api/v1/access_token",
+            client_id=SecretStr("client"),
+            client_secret=SecretStr("secret"),
+            user_agent="god-news-test/1.0",
+            enabled=True,
+            api_use_authorized=True,
+            subreddit="HumansBeingBros",
+            default_limit=3,
+        )
+        run = await collector.collect()
+
+    assert listing_calls == (1 if stop == "rate" else 2)
+    assert [item.post_id for item in run.items] == ["a"]
+    assert run.outcome == ("partial" if stop == "error" else "succeeded")
+    if stop == "error":
+        assert run.errors[0].code == "reddit_api_http_error"
+        assert run.errors[0].retryable is True
 
 
 @pytest.mark.asyncio
@@ -408,7 +565,9 @@ def test_reddit_video_falls_back_to_preview_then_direct_outbound_mp4() -> None:
     preview = _PostData.model_validate(
         {
             **base,
-            "secure_media": {},
+            "secure_media": {
+                "reddit_video": {"fallback_url": "https://v.redd.it/example/HLSPlaylist.m3u8"}
+            },
             "preview": {
                 "reddit_video_preview": {
                     "fallback_url": "https://v.redd.it/example/DASH_720.mp4",
@@ -420,6 +579,9 @@ def test_reddit_video_falls_back_to_preview_then_direct_outbound_mp4() -> None:
     direct = _PostData.model_validate(
         {**base, "url_overridden_by_dest": "https://cdn.example/source.mp4?token=x"}
     )
+    stream = _PostData.model_validate(
+        {**base, "url_overridden_by_dest": "https://cdn.example/source.m3u8"}
+    )
 
     preview_item = RedditOAuthCollector._map_post(preview)
     direct_item = RedditOAuthCollector._map_post(direct)
@@ -428,6 +590,7 @@ def test_reddit_video_falls_back_to_preview_then_direct_outbound_mp4() -> None:
     assert preview_item.video.duration_ms == 12_000
     assert direct_item.video is not None
     assert str(direct_item.video.fallback_url) == "https://cdn.example/source.mp4?token=x"
+    assert RedditOAuthCollector._map_post(stream).video is None
 
 
 @pytest.mark.asyncio

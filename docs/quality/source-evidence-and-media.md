@@ -31,8 +31,16 @@ capture.
 Authorized Pikabu and Dazhong public pages now carry direct MP4 references
 from article video/source tags, article links, Open Graph/Twitter video metadata,
 and JSON-LD `VideoObject.contentUrl` into normalized media provenance. The
-Reddit OAuth adapter also checks the preview video payload and direct MP4
-outbound URL when its primary media fields contain no video. The Jina Reader
+Reddit OAuth adapter pages through the authorized subreddit `/new` listing
+using its `after` cursor, preserving listing order and dropping repeated post IDs.
+It stops at the configured item budget, an exhausted or repeated cursor, an empty
+page, the reported API rate limit, or ten pages. A later API error retains the
+posts already collected and marks the run partial. Post self-text remains the
+normalized story text when present; a link post retains its HTTP(S) destination
+in source provenance without fetching that page. The adapter checks secure,
+ordinary, and preview video payloads in order and records the first direct MP4;
+it also accepts a direct MP4 outbound URL when those payloads contain no usable
+video. The Jina Reader
 layer requests rendered HTML in its JSON response, so the same page snapshot
 supplies article text and direct MP4 references from video/source tags, article
 links, Open Graph/Twitter metadata, and JSON-LD. If Reader does not supply the

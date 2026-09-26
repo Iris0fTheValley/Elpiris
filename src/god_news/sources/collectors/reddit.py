@@ -94,6 +94,7 @@ class _Child(_UpstreamModel):
 
 class _ListingData(_UpstreamModel):
     children: list[_Child] = Field(default_factory=list)
+    after: str | None = None
 
 
 class _Listing(_UpstreamModel):
@@ -199,40 +200,63 @@ class RedditOAuthCollector:
             )
             return recorder.finish(items=[])
 
+        items: list[RawRedditItem] = []
+        seen_posts: set[str] = set()
+        seen_cursors: set[str] = set()
+        after: str | None = None
         try:
             token = await self._token(recorder)
-            listing = await self._listing(token, requested_limit, recorder)
+            # The item budget also bounds pagination; ten pages cap API calls when
+            # listings repeatedly return fewer posts than requested.
+            for _ in range(min(requested_limit, 10)):
+                listing, rate_exhausted = await self._listing(
+                    token, requested_limit - len(items), recorder, after=after
+                )
+                for child in listing.data.children:
+                    post = child.data
+                    if post.id in seen_posts:
+                        continue
+                    seen_posts.add(post.id)
+                    started = perf_counter()
+                    try:
+                        item = self._map_post(post)
+                    except (ValidationError, ValueError):
+                        failure = CollectorFailure(
+                            "reddit_item_contract_invalid",
+                            "A Reddit result did not satisfy the typed source contract.",
+                        )
+                        recorder.errors.append(failure.evidence())
+                        recorder.attempt(
+                            layer="reddit-contract-mapper",
+                            operation="item",
+                            outcome="failed",
+                            duration_ms=(perf_counter() - started) * 1_000,
+                            error_code=failure.code,
+                        )
+                    else:
+                        items.append(item)
+                        recorder.attempt(
+                            layer="reddit-contract-mapper",
+                            operation="item",
+                            outcome="succeeded",
+                            duration_ms=(perf_counter() - started) * 1_000,
+                            item_count=1,
+                        )
+                    if len(items) >= requested_limit:
+                        break
+                cursor = listing.data.after
+                if (
+                    len(items) >= requested_limit
+                    or not listing.data.children
+                    or not cursor
+                    or cursor in seen_cursors
+                    or rate_exhausted
+                ):
+                    break
+                seen_cursors.add(cursor)
+                after = cursor
         except CollectorFailure as exc:
             recorder.errors.append(exc.evidence())
-            return recorder.finish(items=[])
-
-        items: list[RawRedditItem] = []
-        for child in listing.data.children:
-            started = perf_counter()
-            try:
-                item = self._map_post(child.data)
-            except (ValidationError, ValueError):
-                failure = CollectorFailure(
-                    "reddit_item_contract_invalid",
-                    "A Reddit result did not satisfy the typed source contract.",
-                )
-                recorder.errors.append(failure.evidence())
-                recorder.attempt(
-                    layer="reddit-contract-mapper",
-                    operation="item",
-                    outcome="failed",
-                    duration_ms=(perf_counter() - started) * 1_000,
-                    error_code=failure.code,
-                )
-            else:
-                items.append(item)
-                recorder.attempt(
-                    layer="reddit-contract-mapper",
-                    operation="item",
-                    outcome="succeeded",
-                    duration_ms=(perf_counter() - started) * 1_000,
-                    item_count=1,
-                )
         if not items and not recorder.errors:
             recorder.errors.append(
                 CollectorFailure(
@@ -348,13 +372,19 @@ class RedditOAuthCollector:
         token: str,
         limit: int,
         recorder: RunRecorder,
-    ) -> _Listing:
+        *,
+        after: str | None,
+    ) -> tuple[_Listing, bool]:
         assert self._user_agent is not None
         started = perf_counter()
         try:
             response = await self._client.get(
                 f"{self._endpoint}/r/{self._subreddit}/new",
-                params={"limit": limit, "raw_json": 1},
+                params={
+                    "limit": limit,
+                    "raw_json": 1,
+                    **({"after": after} if after is not None else {}),
+                },
                 headers={
                     "Accept": "application/json",
                     "Authorization": f"Bearer {token}",
@@ -417,7 +447,12 @@ class RedditOAuthCollector:
             http_status=response.status_code,
             item_count=len(listing.data.children),
         )
-        return listing
+        remaining = response.headers.get("X-Ratelimit-Remaining")
+        try:
+            rate_exhausted = remaining is not None and float(remaining) < 1
+        except ValueError:
+            rate_exhausted = False
+        return listing, rate_exhausted
 
     @staticmethod
     def _map_post(post: _PostData) -> RawRedditItem:
@@ -432,26 +467,23 @@ class RedditOAuthCollector:
                     )
                 )
 
-        reddit_video = next(
-            (
-                candidate
-                for candidate in (
-                    post.secure_media.reddit_video if post.secure_media else None,
-                    post.media.reddit_video if post.media else None,
-                    post.preview.reddit_video_preview if post.preview else None,
-                )
-                if candidate is not None
-            ),
-            None,
-        )
         video = None
-        if reddit_video is not None:
-            thumbnail = str(preview_images[0].url) if preview_images else None
-            video = RawRedditVideo(
-                fallback_url=unescape(reddit_video.fallback_url),
-                thumbnail_url=thumbnail,
-                duration_ms=(reddit_video.duration * 1_000 if reddit_video.duration else None),
-            )
+        for candidate in (
+            post.secure_media.reddit_video if post.secure_media else None,
+            post.media.reddit_video if post.media else None,
+            post.preview.reddit_video_preview if post.preview else None,
+        ):
+            if candidate is None:
+                continue
+            direct_links = direct_video_links([candidate.fallback_url], post.permalink)
+            if direct_links:
+                thumbnail = str(preview_images[0].url) if preview_images else None
+                video = RawRedditVideo(
+                    fallback_url=direct_links[0],
+                    thumbnail_url=thumbnail,
+                    duration_ms=(candidate.duration * 1_000 if candidate.duration else None),
+                )
+                break
 
         outbound_candidate = post.url_overridden_by_dest or post.url
         outbound_url: str | None = None
