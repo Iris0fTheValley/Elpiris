@@ -83,6 +83,19 @@ class SourceMediaRepository(Protocol):
 
 
 class SourceMediaStore(Protocol):
+    async def write_staged(
+        self,
+        *,
+        story_id: UUID,
+        artifact_id: UUID,
+        content_type: str,
+        body: AsyncIterable[bytes],
+    ) -> tuple[str, str, int, Path]: ...
+
+    async def promote(self, storage_key: str, *, story_id: UUID) -> Path: ...
+
+    async def remove_staged(self, storage_key: str) -> None: ...
+
     async def write(
         self,
         *,

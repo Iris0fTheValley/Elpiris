@@ -3,14 +3,17 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import os
-from collections.abc import AsyncIterable
+from collections.abc import AsyncIterable, Callable
 from pathlib import Path, PurePosixPath
+from typing import ParamSpec, TypeVar
 from uuid import UUID
 
 from god_news.domain.source_media import SourceMediaStore
 from god_news.errors import SourceMediaAcquisitionError
 
 _MP4_CONTENT_TYPES = frozenset({"video/mp4", "application/mp4", "application/octet-stream"})
+_P = ParamSpec("_P")
+_T = TypeVar("_T")
 
 
 class LocalSourceMediaStore(SourceMediaStore):
@@ -21,6 +24,27 @@ class LocalSourceMediaStore(SourceMediaStore):
         self._max_download_bytes = max_download_bytes
 
     async def write(
+        self,
+        *,
+        story_id: UUID,
+        artifact_id: UUID,
+        content_type: str,
+        body: AsyncIterable[bytes],
+    ) -> tuple[str, str, int, Path]:
+        storage_key, digest, size, _ = await self.write_staged(
+            story_id=story_id,
+            artifact_id=artifact_id,
+            content_type=content_type,
+            body=body,
+        )
+        try:
+            path = await self.promote(storage_key, story_id=story_id)
+        except (Exception, asyncio.CancelledError):
+            await self.remove_staged(storage_key)
+            raise
+        return storage_key, digest, size, path
+
+    async def write_staged(
         self,
         *,
         story_id: UUID,
@@ -42,7 +66,7 @@ class LocalSourceMediaStore(SourceMediaStore):
         size = 0
         header = bytearray()
         try:
-            handle = await asyncio.to_thread(temporary.open, "xb")
+            handle = temporary.open("xb")
             try:
                 async for chunk in body:
                     if not isinstance(chunk, bytes):
@@ -62,18 +86,21 @@ class LocalSourceMediaStore(SourceMediaStore):
                     if len(header) < 32:
                         header.extend(chunk[: 32 - len(header)])
                     digest.update(chunk)
-                    await asyncio.to_thread(handle.write, chunk)
-                await asyncio.to_thread(handle.flush)
-                await asyncio.to_thread(os.fsync, handle.fileno())
+                    await _thread_operation(handle.write, chunk)
+                await _thread_operation(handle.flush)
+                await _thread_operation(os.fsync, handle.fileno())
             finally:
-                await asyncio.to_thread(handle.close)
+                await _thread_operation(handle.close)
             if size <= 0 or not _looks_like_mp4(bytes(header)):
                 raise SourceMediaAcquisitionError(
                     story_id,
                     "Source media bytes do not contain an MP4 file signature.",
                 )
-            await asyncio.to_thread(os.replace, temporary, target)
+            return storage_key, digest.hexdigest(), size, temporary
         except SourceMediaAcquisitionError:
+            await asyncio.to_thread(_remove_if_file, temporary)
+            raise
+        except asyncio.CancelledError:
             await asyncio.to_thread(_remove_if_file, temporary)
             raise
         except (FileExistsError, OSError) as exc:
@@ -84,7 +111,24 @@ class LocalSourceMediaStore(SourceMediaStore):
                 status_code=500,
                 retryable=True,
             ) from exc
-        return storage_key, digest.hexdigest(), size, target
+
+    async def promote(self, storage_key: str, *, story_id: UUID) -> Path:
+        target = self._path_for_key(storage_key)
+        temporary = target.with_suffix(".partial")
+        try:
+            await _thread_operation(os.replace, temporary, target)
+        except OSError as exc:
+            raise SourceMediaAcquisitionError(
+                story_id,
+                "Source media could not be stored safely.",
+                status_code=500,
+                retryable=True,
+            ) from exc
+        return target
+
+    async def remove_staged(self, storage_key: str) -> None:
+        path = self._path_for_key(storage_key).with_suffix(".partial")
+        await asyncio.to_thread(_remove_if_file, path)
 
     async def remove(self, storage_key: str) -> None:
         await asyncio.to_thread(_remove_if_file, self._path_for_key(storage_key))
@@ -122,6 +166,16 @@ class LocalSourceMediaStore(SourceMediaStore):
 
 def _looks_like_mp4(header: bytes) -> bool:
     return len(header) >= 12 and header[4:8] == b"ftyp"
+
+
+async def _thread_operation(function: Callable[_P, _T], *args: _P.args, **kwargs: _P.kwargs) -> _T:
+    worker = asyncio.create_task(asyncio.to_thread(function, *args, **kwargs))
+    try:
+        return await asyncio.shield(worker)
+    except asyncio.CancelledError:
+        # Let filesystem work finish before callers remove staged/final bytes.
+        await worker
+        raise
 
 
 def _remove_if_file(path: Path) -> None:

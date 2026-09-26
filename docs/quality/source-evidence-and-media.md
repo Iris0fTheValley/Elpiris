@@ -72,6 +72,14 @@ and emits a rights-aware JSON report. Interrupted downloads use validated HTTP
 Range resumption. A server that ignores or contradicts the requested range is
 rejected instead of risking a corrupted file.
 
+Acquisition streams into a private `.partial` file and probes those bytes before
+publishing them. Network transfer and ffprobe do not hold the shared asset
+lifecycle lock, so visual uploads, media lifecycle changes, and retention can
+proceed during a slow source download. The final rename and repository claim
+remain under that lock; retention ignores the staged file and sees only a
+claimed MP4. A story version change before publication rejects the staged
+download and removes its bytes.
+
 The fixture remains `permission_required` and therefore
 `publish_eligible=false`. Successful technical verification is not publication
 permission.

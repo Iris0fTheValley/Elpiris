@@ -117,6 +117,41 @@ class _CancelledInspector:
         raise asyncio.CancelledError
 
 
+class _PausedDownloader(_Downloader):
+    def __init__(self) -> None:
+        super().__init__()
+        self.entered = asyncio.Event()
+        self.resume = asyncio.Event()
+
+    @asynccontextmanager
+    async def stream(
+        self,
+        story_id: UUID,
+        url: str,
+    ) -> AsyncIterator[tuple[str, AsyncIterable[bytes]]]:
+        del story_id, url
+        self.calls += 1
+
+        async def chunks() -> AsyncIterator[bytes]:
+            self.entered.set()
+            await self.resume.wait()
+            yield self.payload
+
+        yield "video/mp4", chunks()
+
+
+class _PausedInspector(_Inspector):
+    def __init__(self) -> None:
+        self.entered = asyncio.Event()
+        self.resume = asyncio.Event()
+
+    async def inspect(self, path: Path) -> SourceVideoProbe:
+        assert path.suffix == ".partial"
+        self.entered.set()
+        await self.resume.wait()
+        return await super().inspect(path)
+
+
 async def _one_chunk(payload: bytes) -> AsyncIterator[bytes]:
     yield payload
 
@@ -177,6 +212,206 @@ async def test_source_video_acquisition_is_idempotent_and_keeps_reddit_review_on
     stored = await repository.get_by_index(story.story_id, 1)
     assert stored is not None
     assert (tmp_path / "media" / stored.storage_key).read_bytes() == MP4_BYTES
+
+
+@pytest.mark.asyncio
+async def test_slow_source_acquisition_releases_shared_asset_lock_until_publish(
+    tmp_path: Path,
+) -> None:
+    story = _story()
+    stories = InMemoryStoryRepository()
+    await stories.create(story)
+    repository = _InMemorySourceMediaRepository()
+    downloader = _PausedDownloader()
+    inspector = _PausedInspector()
+    shared_lock = asyncio.Lock()
+    root = tmp_path / "media"
+    service = SourceMediaService(
+        stories=stories,
+        repository=repository,
+        store=LocalSourceMediaStore(root, max_download_bytes=1024),
+        downloader=downloader,
+        inspector=inspector,
+        asset_lifecycle_lock=shared_lock,
+    )
+    request = AcquireSourceMediaRequest(
+        expected_story_version=story.version,
+        media_index=1,
+        requested_by="editor",
+    )
+    first = asyncio.create_task(service.acquire(story.story_id, request))
+    second = asyncio.create_task(service.acquire(story.story_id, request))
+    try:
+        await asyncio.wait_for(downloader.entered.wait(), timeout=2)
+        await asyncio.wait_for(shared_lock.acquire(), timeout=2)
+        shared_lock.release()
+        assert downloader.calls == 1
+
+        downloader.resume.set()
+        await asyncio.wait_for(inspector.entered.wait(), timeout=2)
+        await asyncio.wait_for(shared_lock.acquire(), timeout=2)
+        assert list(root.rglob("*.partial"))
+        assert list(root.rglob("*.mp4")) == []
+        inspector.resume.set()
+        await asyncio.sleep(0)
+        assert not first.done()
+        shared_lock.release()
+
+        assert await first == await second
+        assert downloader.calls == 1
+        assert list(root.rglob("*.partial")) == []
+        assert len(list(root.rglob("*.mp4"))) == 1
+        assert len(await repository.list_for_story(story.story_id)) == 1
+    finally:
+        downloader.resume.set()
+        inspector.resume.set()
+        if shared_lock.locked():
+            shared_lock.release()
+        for task in (first, second):
+            if not task.done():
+                task.cancel()
+        await asyncio.gather(first, second, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_source_media_repository_failure_cleans_staged_and_promoted_bytes(
+    tmp_path: Path,
+) -> None:
+    class _FailOnceRepository(_InMemorySourceMediaRepository):
+        failed = False
+
+        async def create(self, artifact: StoredSourceMediaArtifact) -> StoredSourceMediaArtifact:
+            if not self.failed:
+                self.failed = True
+                raise RuntimeError("database unavailable")
+            return await super().create(artifact)
+
+    story = _story()
+    stories = InMemoryStoryRepository()
+    await stories.create(story)
+    repository = _FailOnceRepository()
+    root = tmp_path / "media"
+    service = SourceMediaService(
+        stories=stories,
+        repository=repository,
+        store=LocalSourceMediaStore(root, max_download_bytes=1024),
+        downloader=_Downloader(),
+        inspector=_Inspector(),
+        asset_lifecycle_lock=asyncio.Lock(),
+    )
+    request = AcquireSourceMediaRequest(
+        expected_story_version=story.version,
+        media_index=1,
+        requested_by="editor",
+    )
+
+    with pytest.raises(RuntimeError, match="database unavailable"):
+        await service.acquire(story.story_id, request)
+    assert list(root.rglob("*.partial")) == []
+    assert list(root.rglob("*.mp4")) == []
+
+    await service.acquire(story.story_id, request)
+    assert len(list(root.rglob("*.mp4"))) == 1
+
+
+@pytest.mark.asyncio
+async def test_cancellation_during_claim_keeps_published_file_with_its_row(
+    tmp_path: Path,
+) -> None:
+    class _PausedRepository(_InMemorySourceMediaRepository):
+        def __init__(self) -> None:
+            super().__init__()
+            self.entered = asyncio.Event()
+            self.resume = asyncio.Event()
+
+        async def create(self, artifact: StoredSourceMediaArtifact) -> StoredSourceMediaArtifact:
+            self.entered.set()
+            await self.resume.wait()
+            return await super().create(artifact)
+
+    story = _story()
+    stories = InMemoryStoryRepository()
+    await stories.create(story)
+    repository = _PausedRepository()
+    root = tmp_path / "media"
+    service = SourceMediaService(
+        stories=stories,
+        repository=repository,
+        store=LocalSourceMediaStore(root, max_download_bytes=1024),
+        downloader=_Downloader(),
+        inspector=_Inspector(),
+        asset_lifecycle_lock=asyncio.Lock(),
+    )
+    task = asyncio.create_task(
+        service.acquire(
+            story.story_id,
+            AcquireSourceMediaRequest(
+                expected_story_version=story.version,
+                media_index=1,
+                requested_by="editor",
+            ),
+        )
+    )
+    try:
+        await asyncio.wait_for(repository.entered.wait(), timeout=2)
+        task.cancel()
+        await asyncio.sleep(0)
+        assert not task.done()
+        repository.resume.set()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert len(await repository.list_for_story(story.story_id)) == 1
+        assert len(list(root.rglob("*.mp4"))) == 1
+        assert list(root.rglob("*.partial")) == []
+    finally:
+        repository.resume.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
+
+
+@pytest.mark.asyncio
+async def test_story_version_change_during_probe_rejects_staged_download(
+    tmp_path: Path,
+) -> None:
+    story = _story()
+    stories = InMemoryStoryRepository()
+    await stories.create(story)
+    repository = _InMemorySourceMediaRepository()
+    inspector = _PausedInspector()
+    root = tmp_path / "media"
+    service = SourceMediaService(
+        stories=stories,
+        repository=repository,
+        store=LocalSourceMediaStore(root, max_download_bytes=1024),
+        downloader=_Downloader(),
+        inspector=inspector,
+        asset_lifecycle_lock=asyncio.Lock(),
+    )
+    task = asyncio.create_task(
+        service.acquire(
+            story.story_id,
+            AcquireSourceMediaRequest(
+                expected_story_version=story.version,
+                media_index=1,
+                requested_by="editor",
+            ),
+        )
+    )
+    try:
+        await asyncio.wait_for(inspector.entered.wait(), timeout=2)
+        await stories.save(story, expected_version=story.version)
+        inspector.resume.set()
+        with pytest.raises(ConcurrentWriteError):
+            await task
+        assert await repository.list_for_story(story.story_id) == []
+        assert list(root.rglob("*.partial")) == []
+        assert list(root.rglob("*.mp4")) == []
+    finally:
+        inspector.resume.set()
+        if not task.done():
+            task.cancel()
+        await asyncio.gather(task, return_exceptions=True)
 
 
 @pytest.mark.asyncio
@@ -474,6 +709,40 @@ async def test_source_media_cancellation_removes_downloaded_bytes(tmp_path: Path
         )
 
     assert await repository.list_for_story(story.story_id) == []
+    assert await asyncio.to_thread(lambda: list(tmp_path.rglob("*.mp4"))) == []
+
+
+@pytest.mark.asyncio
+async def test_source_media_cancellation_during_download_removes_partial_bytes(
+    tmp_path: Path,
+) -> None:
+    story = _story()
+    stories = InMemoryStoryRepository()
+    await stories.create(story)
+    downloader = _PausedDownloader()
+    service = SourceMediaService(
+        stories=stories,
+        repository=_InMemorySourceMediaRepository(),
+        store=LocalSourceMediaStore(tmp_path / "media", max_download_bytes=1024),
+        downloader=downloader,
+        inspector=_Inspector(),
+        asset_lifecycle_lock=asyncio.Lock(),
+    )
+    task = asyncio.create_task(
+        service.acquire(
+            story.story_id,
+            AcquireSourceMediaRequest(
+                expected_story_version=story.version,
+                media_index=1,
+                requested_by="editor",
+            ),
+        )
+    )
+    await asyncio.wait_for(downloader.entered.wait(), timeout=2)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
+    assert await asyncio.to_thread(lambda: list(tmp_path.rglob("*.partial"))) == []
     assert await asyncio.to_thread(lambda: list(tmp_path.rglob("*.mp4"))) == []
 
 
