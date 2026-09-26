@@ -32,9 +32,13 @@ Authorized Pikabu and Dazhong public pages now carry direct MP4 references
 from article video/source tags, article links, Open Graph/Twitter video metadata,
 and JSON-LD `VideoObject.contentUrl` into normalized media provenance. The
 Reddit OAuth adapter also checks the preview video payload and direct MP4
-outbound URL when its primary media fields contain no video. Reader output
-contributes direct MP4 links found in article text. Duplicate links are
-discarded and discovery is capped at 50 links per page.
+outbound URL when its primary media fields contain no video. The Jina Reader
+layer requests rendered HTML in its JSON response, so the same page snapshot
+supplies article text and direct MP4 references from video/source tags, article
+links, Open Graph/Twitter metadata, and JSON-LD. If Reader does not supply the
+requested HTML, the fetch chain tries its next layer instead of treating a
+text-only result as complete media evidence. Duplicate links are discarded and
+discovery is capped at 50 links per page.
 
 The URL fetch layers extract article text with Trafilatura where available and
 fall back to visible article/main text for sparse or rendered pages. The text

@@ -10,7 +10,7 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 from god_news.domain.enums import SourceKind
 from god_news.domain.models import FetchedDocument, SourceRequest, SourceSnapshot, UrlSource
 from god_news.errors import FetchError
-from god_news.infrastructure.fetchers.html_content import video_links_from_text
+from god_news.infrastructure.fetchers.html_content import choose_article_text, extract_html_content
 from god_news.infrastructure.fetchers.url_policy import UrlPolicy
 from god_news.sources.text import normalize_text
 
@@ -18,7 +18,7 @@ from god_news.sources.text import normalize_text
 class _JinaData(BaseModel):
     model_config = ConfigDict(extra="ignore")
 
-    content: str
+    html: str
     title: str | None = None
     url: str | None = None
     author: str | None = None
@@ -83,8 +83,7 @@ class JinaReaderFetcher:
         headers = {
             "Accept": "application/json",
             "X-Timeout": str(self._page_timeout_seconds),
-            "X-Retain-Images": "none",
-            "X-Retain-Links": "text",
+            "X-Respond-With": "html",
         }
         if self._api_key:
             headers["Authorization"] = f"Bearer {self._api_key}"
@@ -116,10 +115,31 @@ class JinaReaderFetcher:
             raise FetchError("Jina Reader returned an unexpected response shape.") from exc
         if payload.code != 200 or payload.data.http_status not in {None, 200}:
             raise FetchError("Jina Reader did not fetch a successful source response.")
-        content = normalize_text(payload.data.content)
-        if len(content) < self._min_content_characters:
-            raise FetchError("Jina Reader returned insufficient article content.")
         final_url = await self._policy.validate(payload.data.url or source_url)
+        visible = extract_html_content(payload.data.html, final_url)
+        article_text: str | None = None
+        try:
+            from trafilatura import bare_extraction
+
+            article = bare_extraction(
+                payload.data.html,
+                url=final_url,
+                include_comments=False,
+                include_tables=False,
+                favor_precision=True,
+                deduplicate=True,
+            )
+            extracted = (
+                article.get("text") if isinstance(article, dict) else getattr(article, "text", None)
+            )
+            article_text = extracted if isinstance(extracted, str) else None
+        except (ImportError, ValueError):
+            pass
+        content = choose_article_text(article_text, visible.text, self._min_content_characters)
+        if not content and visible.video_links:
+            content = normalize_text(payload.data.title or "")
+        if len(content) < self._min_content_characters and (not visible.video_links or not content):
+            raise FetchError("Jina Reader returned insufficient article content.")
         digest = sha256(content.encode("utf-8")).hexdigest()
         return FetchedDocument(
             source=SourceSnapshot(
@@ -133,7 +153,7 @@ class JinaReaderFetcher:
                 content_sha256=digest,
             ),
             content=content,
-            video_links=video_links_from_text(content, final_url),
+            video_links=visible.video_links,
         )
 
     async def aclose(self) -> None:

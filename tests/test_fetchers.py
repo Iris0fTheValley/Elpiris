@@ -114,7 +114,11 @@ async def test_jina_reader_validates_typed_json_contract() -> None:
         payload = {
             "code": 200,
             "data": {
-                "content": "A" * 250 + " [source video](https://media.example/clip.mp4)",
+                "html": (
+                    '<html><head><meta property="og:video" '
+                    'content="https://media.example/clip.mp4"></head>'
+                    "<body><article><p>" + "A" * 250 + "</p></article></body></html>"
+                ),
                 "title": "Typed article",
                 "url": "https://8.8.8.8/article",
                 "httpStatus": 200,
@@ -138,7 +142,86 @@ async def test_jina_reader_validates_typed_json_contract() -> None:
     assert result.source.published_at is not None
     assert [str(link) for link in result.video_links] == ["https://media.example/clip.mp4"]
     assert captured[0].headers["accept"] == "application/json"
+    assert captured[0].headers["x-respond-with"] == "html"
     assert "authorization" not in captured[0].headers
+
+
+@pytest.mark.asyncio
+async def test_jina_html_preserves_visible_article_and_video_metadata() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={
+                "code": 200,
+                "data": {
+                    "title": "Public video story",
+                    "url": "https://8.8.8.8/story",
+                    "html": (
+                        "<html><head>"
+                        '<meta property="og:video:secure_url" content="/social.mp4">'
+                        '<script type="application/ld+json">'
+                        '{"@type":"VideoObject","contentUrl":"/structured.mp4"}'
+                        "</script></head><body>"
+                        "<nav>Unrelated navigation text</nav><article>"
+                        "<h1>Public video story</h1><p>"
+                        + "A complete article sentence. "
+                        * 12
+                        + '</p><video><source src="/original.mp4"></video>'
+                        "</article></body></html>"
+                    ),
+                },
+            },
+            request=request,
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        fetcher = JinaReaderFetcher(
+            client=client,
+            policy=UrlPolicy(),
+            base_url="https://r.jina.ai",
+            api_key=None,
+            page_timeout_seconds=10,
+            max_response_bytes=10_000,
+            min_content_characters=200,
+        )
+        result = await fetcher.fetch(UrlSource(url="https://8.8.8.8/story"))
+
+    assert "A complete article sentence." in result.content
+    assert "Unrelated navigation" not in result.content
+    assert [str(link) for link in result.video_links] == [
+        "https://8.8.8.8/social.mp4",
+        "https://8.8.8.8/structured.mp4",
+        "https://8.8.8.8/original.mp4",
+    ]
+
+
+@pytest.mark.asyncio
+async def test_chain_falls_back_when_jina_omits_requested_html() -> None:
+    async def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            json={"code": 200, "data": {"title": "Text only", "content": "A" * 250}},
+            request=request,
+        )
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        jina = JinaReaderFetcher(
+            client=client,
+            policy=UrlPolicy(),
+            base_url="https://r.jina.ai",
+            api_key=None,
+            page_timeout_seconds=10,
+            max_response_bytes=10_000,
+            min_content_characters=200,
+        )
+        fallback = SuccessfulFetcher()
+        result = await FetcherChain([jina, fallback]).fetch_with_trace(
+            UrlSource(url="https://8.8.8.8/story")
+        )
+
+    assert result.document.content == "Recovered article body."
+    assert fallback.calls == 1
+    assert [attempt.outcome for attempt in result.attempts] == ["failed", "succeeded"]
 
 
 @pytest.mark.asyncio
@@ -150,7 +233,7 @@ async def test_jina_fragment_uses_post_and_enforces_stream_limit() -> None:
         payload = {
             "code": 200,
             "data": {
-                "content": "B" * 250,
+                "html": "<html><body><article><p>" + "B" * 250 + "</p></article></body></html>",
                 "title": "SPA article",
                 "url": "https://8.8.8.8/#article",
                 "httpStatus": 200,
