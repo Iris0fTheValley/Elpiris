@@ -114,7 +114,7 @@ async def test_jina_reader_validates_typed_json_contract() -> None:
         payload = {
             "code": 200,
             "data": {
-                "content": "A" * 250,
+                "content": "A" * 250 + " [source video](https://media.example/clip.mp4)",
                 "title": "Typed article",
                 "url": "https://8.8.8.8/article",
                 "httpStatus": 200,
@@ -136,6 +136,7 @@ async def test_jina_reader_validates_typed_json_contract() -> None:
         result = await fetcher.fetch(UrlSource(url="https://8.8.8.8/article"))
     assert result.source.fetcher == "jina-reader"
     assert result.source.published_at is not None
+    assert [str(link) for link in result.video_links] == ["https://media.example/clip.mp4"]
     assert captured[0].headers["accept"] == "application/json"
     assert "authorization" not in captured[0].headers
 
@@ -201,8 +202,9 @@ async def test_isolated_browser_and_scrapy_parent_adapters(monkeypatch) -> None:
                     '<html><head><meta property="article:published_time" '
                     'content="2026-07-12T08:00:00Z"></head><body>'
                     '<a href="/next">Next</a>'
+                    '<article><video><source src="/clip.mp4"></video>'
                     + "rendered " * 40
-                    + "</body></html>"
+                    + "</article></body></html>"
                 ),
             )
         return ScrapyWorkerResponse(
@@ -211,6 +213,7 @@ async def test_isolated_browser_and_scrapy_parent_adapters(monkeypatch) -> None:
             title="   ",
             content="extracted " * 40,
             outbound_links=["https://8.8.8.8/next"],
+            video_links=["https://8.8.8.8/clip.mp4"],
         )
 
     monkeypatch.setattr(
@@ -237,9 +240,8 @@ async def test_isolated_browser_and_scrapy_parent_adapters(monkeypatch) -> None:
     browser_result = await browser.fetch(source)
     assert browser_result.source.fetcher == "drission-page"
     assert browser_result.source.published_at is not None
-    assert [str(link) for link in browser_result.outbound_links] == [
-        "https://8.8.8.8/next"
-    ]
+    assert [str(link) for link in browser_result.outbound_links] == ["https://8.8.8.8/next"]
+    assert [str(link) for link in browser_result.video_links] == ["https://8.8.8.8/clip.mp4"]
 
     scrapy = ScrapyTrafilaturaFetcher(
         policy=policy,
@@ -257,9 +259,38 @@ async def test_isolated_browser_and_scrapy_parent_adapters(monkeypatch) -> None:
     scrapy_result = await scrapy.fetch(source)
     assert scrapy_result.source.fetcher == "scrapy-trafilatura"
     assert scrapy_result.source.title == "Untitled source"
-    assert [str(link) for link in scrapy_result.outbound_links] == [
-        "https://8.8.8.8/next"
-    ]
+    assert [str(link) for link in scrapy_result.outbound_links] == ["https://8.8.8.8/next"]
+    assert [str(link) for link in scrapy_result.video_links] == ["https://8.8.8.8/clip.mp4"]
+
+
+@pytest.mark.asyncio
+async def test_browser_accepts_titled_video_page_without_article_body(monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    async def fake_worker(**kwargs):  # type: ignore[no-untyped-def]
+        del kwargs
+        return DrissionWorkerResponse(
+            ok=True,
+            final_url="https://8.8.8.8/video",
+            title="Source clip",
+            html='<html><body><article><video src="/clip.mp4"></video></article></body></html>',
+        )
+
+    monkeypatch.setattr("god_news.infrastructure.fetchers.drission.run_json_worker", fake_worker)
+    fetcher = DrissionPageFetcher(
+        policy=UrlPolicy(),
+        timeout_seconds=5,
+        base_timeout_seconds=2,
+        script_timeout_seconds=2,
+        quit_timeout_seconds=2,
+        max_concurrency=1,
+        worker_module="unused",
+        max_response_bytes=10_000,
+        min_content_characters=200,
+    )
+
+    result = await fetcher.fetch(UrlSource(url="https://8.8.8.8/video"))
+
+    assert result.content == "Source clip"
+    assert [str(link) for link in result.video_links] == ["https://8.8.8.8/clip.mp4"]
 
 
 @pytest.mark.asyncio
@@ -276,12 +307,13 @@ async def test_scrapy_worker_conditionally_crawls_same_site_offline() -> None:
             elif path == b"/article":
                 content_type = "text/html; charset=utf-8"
                 body = (
-                    '<html><head><title>Deep fixture</title>'
+                    "<html><head><title>Deep fixture</title>"
                     '<script type="application/ld+json">'
                     '{"headline":"Structured fixture",'
                     '"datePublished":"2026-07-12T08:00:00+08:00"}'
                     "</script></head><body>"
-                    f"<article><h1>Deep fixture</h1><p>{article}</p></article>"
+                    f"<article><h1>Deep fixture</h1><p>{article}</p>"
+                    '<video><source src="/clip.mp4"></video></article>'
                     "</body></html>"
                 ).encode()
             else:
@@ -331,3 +363,4 @@ async def test_scrapy_worker_conditionally_crawls_same_site_offline() -> None:
     assert response.title == "Structured fixture"
     assert response.published_at is not None
     assert response.published_at.utcoffset() is not None
+    assert response.video_links == [f"http://127.0.0.1:{port}/clip.mp4"]

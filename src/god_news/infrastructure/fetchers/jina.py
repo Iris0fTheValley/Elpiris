@@ -10,7 +10,9 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 from god_news.domain.enums import SourceKind
 from god_news.domain.models import FetchedDocument, SourceRequest, SourceSnapshot, UrlSource
 from god_news.errors import FetchError
+from god_news.infrastructure.fetchers.html_content import video_links_from_text
 from god_news.infrastructure.fetchers.url_policy import UrlPolicy
+from god_news.sources.text import normalize_text
 
 
 class _JinaData(BaseModel):
@@ -114,7 +116,7 @@ class JinaReaderFetcher:
             raise FetchError("Jina Reader returned an unexpected response shape.") from exc
         if payload.code != 200 or payload.data.http_status not in {None, 200}:
             raise FetchError("Jina Reader did not fetch a successful source response.")
-        content = payload.data.content.strip()
+        content = normalize_text(payload.data.content)
         if len(content) < self._min_content_characters:
             raise FetchError("Jina Reader returned insufficient article content.")
         final_url = await self._policy.validate(payload.data.url or source_url)
@@ -131,6 +133,7 @@ class JinaReaderFetcher:
                 content_sha256=digest,
             ),
             content=content,
+            video_links=video_links_from_text(content, final_url),
         )
 
     async def aclose(self) -> None:

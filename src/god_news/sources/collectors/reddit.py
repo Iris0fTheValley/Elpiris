@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 import httpx
 from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError
 
+from god_news.infrastructure.fetchers.html_content import direct_video_links
 from god_news.sources.collectors.models import (
     CollectorDiagnostic,
     CollectorReadiness,
@@ -50,13 +51,14 @@ class _PreviewImage(_UpstreamModel):
     source: _PreviewSource
 
 
-class _Preview(_UpstreamModel):
-    images: list[_PreviewImage] = Field(default_factory=list)
-
-
 class _RedditVideoPayload(_UpstreamModel):
     fallback_url: str
     duration: int | None = None
+
+
+class _Preview(_UpstreamModel):
+    images: list[_PreviewImage] = Field(default_factory=list)
+    reddit_video_preview: _RedditVideoPayload | None = None
 
 
 class _SecureMedia(_UpstreamModel):
@@ -430,8 +432,18 @@ class RedditOAuthCollector:
                     )
                 )
 
-        media = post.secure_media or post.media
-        reddit_video = media.reddit_video if media else None
+        reddit_video = next(
+            (
+                candidate
+                for candidate in (
+                    post.secure_media.reddit_video if post.secure_media else None,
+                    post.media.reddit_video if post.media else None,
+                    post.preview.reddit_video_preview if post.preview else None,
+                )
+                if candidate is not None
+            ),
+            None,
+        )
         video = None
         if reddit_video is not None:
             thumbnail = str(preview_images[0].url) if preview_images else None
@@ -447,6 +459,11 @@ class RedditOAuthCollector:
             parts = urlsplit(unescape(outbound_candidate))
             if parts.scheme in {"http", "https"} and parts.hostname:
                 outbound_url = unescape(outbound_candidate)
+
+        if video is None and outbound_url is not None:
+            direct_links = direct_video_links([outbound_url], outbound_url)
+            if direct_links:
+                video = RawRedditVideo(fallback_url=direct_links[0])
 
         return RawRedditItem(
             post_id=post.id,

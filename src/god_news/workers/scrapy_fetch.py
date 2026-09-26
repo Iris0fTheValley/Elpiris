@@ -16,6 +16,10 @@ from scrapy.http import Request, Response, TextResponse
 from scrapy.linkextractors import LinkExtractor
 from trafilatura import bare_extraction
 
+from god_news.infrastructure.fetchers.html_content import (
+    choose_article_text,
+    extract_html_content,
+)
 from god_news.infrastructure.fetchers.scrapy import ScrapyWorkerRequest, ScrapyWorkerResponse
 from god_news.infrastructure.fetchers.url_policy import UrlPolicy, normalize_allowed_ports
 
@@ -79,9 +83,7 @@ def _json_ld_article_metadata(response: TextResponse) -> tuple[str | None, datet
     time_value = response.css("time[datetime]::attr(datetime)").get()
     if time_value:
         try:
-            return discovered_headline, datetime.fromisoformat(
-                time_value.replace("Z", "+00:00")
-            )
+            return discovered_headline, datetime.fromisoformat(time_value.replace("Z", "+00:00"))
         except ValueError:
             pass
     return discovered_headline, None
@@ -136,6 +138,7 @@ def _run(request: ScrapyWorkerRequest) -> ScrapyWorkerResponse:
             if is_requested_page and outbound_links:
                 holder.root_outbound_links = outbound_links
             structured_title, structured_published_at = _json_ld_article_metadata(response)
+            visible = extract_html_content(response.text, response.url)
             document = bare_extraction(
                 response.body,
                 url=response.url,
@@ -158,7 +161,14 @@ def _run(request: ScrapyWorkerRequest) -> ScrapyWorkerResponse:
                 published_at = document.date
             else:
                 text = title = author = published_at = None
-            cleaned = text.strip() if isinstance(text, str) else ""
+            cleaned = choose_article_text(
+                text if isinstance(text, str) else None,
+                visible.text,
+                request.min_content_characters,
+            )
+            if not cleaned and visible.video_links:
+                fallback_title = structured_title or title or response.css("title::text").get()
+                cleaned = fallback_title.strip() if isinstance(fallback_title, str) else ""
             if cleaned:
                 candidate = ScrapyWorkerResponse(
                     ok=True,
@@ -171,6 +181,7 @@ def _run(request: ScrapyWorkerRequest) -> ScrapyWorkerResponse:
                     author=str(author) if author else None,
                     published_at=structured_published_at or published_at,
                     outbound_links=holder.root_outbound_links or outbound_links,
+                    video_links=visible.video_links,
                     http_status=response.status,
                 )
                 previous_size = (
@@ -180,7 +191,7 @@ def _run(request: ScrapyWorkerRequest) -> ScrapyWorkerResponse:
                 )
                 if len(cleaned) > previous_size:
                     holder.response = candidate
-                if len(cleaned) >= request.min_content_characters:
+                if len(cleaned) >= request.min_content_characters or visible.video_links:
                     raise CloseSpider("article_content_found")
             elif holder.response is None:
                 holder.response = ScrapyWorkerResponse(

@@ -390,6 +390,34 @@ async def test_source_media_http_adapter_retries_initial_connection_failure() ->
 
 
 @pytest.mark.asyncio
+async def test_source_media_http_adapter_retries_transient_http_status() -> None:
+    story_id = _story().story_id
+    calls = 0
+
+    async def handler(request: httpx.Request) -> httpx.Response:
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            return httpx.Response(503, request=request)
+        return httpx.Response(200, content=MP4_BYTES, request=request)
+
+    async with httpx.AsyncClient(transport=httpx.MockTransport(handler)) as client:
+        downloader = HttpSourceMediaDownloader(  # type: ignore[arg-type]
+            client,
+            _UrlPolicy(),
+            max_attempts=2,
+        )
+        async with downloader.stream(story_id, "https://media.example/video.mp4") as (
+            _,
+            body,
+        ):
+            received = b"".join([chunk async for chunk in body])
+
+    assert received == MP4_BYTES
+    assert calls == 2
+
+
+@pytest.mark.asyncio
 async def test_source_media_http_adapter_refuses_unsafe_full_body_resume() -> None:
     story_id = _story().story_id
     calls = 0
@@ -576,8 +604,7 @@ async def test_source_media_api_acquires_lists_and_streams_without_local_paths(
             assert listing.json() == [payload]
 
             content = await client.get(
-                f"/api/v1/stories/{story.story_id}/source-media/"
-                f"{payload['artifact_id']}/content"
+                f"/api/v1/stories/{story.story_id}/source-media/{payload['artifact_id']}/content"
             )
             assert content.status_code == 200
             assert content.content == MP4_BYTES

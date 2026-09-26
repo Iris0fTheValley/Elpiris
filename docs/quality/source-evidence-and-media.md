@@ -28,6 +28,25 @@ capture.
 
 ## Real source video
 
+Authorized Pikabu and Dazhong public pages now carry direct MP4 references
+from article video/source tags, article links, Open Graph/Twitter video metadata,
+and JSON-LD `VideoObject.contentUrl` into normalized media provenance. The
+Reddit OAuth adapter also checks the preview video payload and direct MP4
+outbound URL when its primary media fields contain no video. Reader output
+contributes direct MP4 links found in article text. Duplicate links are
+discarded and discovery is capped at 50 links per page.
+
+The URL fetch layers extract article text with Trafilatura where available and
+fall back to visible article/main text for sparse or rendered pages. The text
+is normalized consistently before it enters a story. A titled video page can
+use its title as minimal text when no article body exists. Embedded players,
+streaming manifests, and other formats are not treated as downloadable source
+videos: the current acquisition boundary verifies MP4 bytes and ffprobe
+metadata. Discovery records a candidate; an editor still acquires it manually,
+and the existing rights review remains mandatory. Acquisition retries transient
+HTTP 429/5xx responses and interrupted downloads, but redirects still require
+the destination URL to be captured and reviewed first.
+
 Run the production acquisition boundary against the checked-in real Pikabu
 fixture:
 

@@ -31,7 +31,9 @@ from god_news.sources.collectors.support import (
 )
 from god_news.sources.models import (
     PikabuTextBlock,
+    PikabuVideoBlock,
     RawDazhongItem,
+    RawDazhongVideo,
     RawPikabuItem,
     RawRightsDeclaration,
     SourceName,
@@ -115,9 +117,7 @@ class AuthorizedPublicPageCollector(ABC, Generic[RawPublicItemT]):
 
     def readiness(self) -> CollectorReadiness:
         configured = bool(
-            self._endpoint
-            and self._allowed_host_suffixes
-            and self._host_allowed(self._endpoint)
+            self._endpoint and self._allowed_host_suffixes and self._host_allowed(self._endpoint)
         )
         return readiness_for(
             source=self.source,
@@ -237,10 +237,7 @@ class AuthorizedPublicPageCollector(ABC, Generic[RawPublicItemT]):
             result = await self._fetcher.fetch_with_trace(UrlSource(url=url))
         except TracedFetchError as exc:
             self._record_fetch_attempts(exc.attempts, operation, recorder)
-            if any(
-                attempt.error_code == "access_challenge_detected"
-                for attempt in exc.attempts
-            ):
+            if any(attempt.error_code == "access_challenge_detected" for attempt in exc.attempts):
                 raise CollectorFailure(
                     "access_challenge_detected",
                     (
@@ -358,6 +355,7 @@ class DazhongPublicPageCollector(AuthorizedPublicPageCollector[RawDazhongItem]):
             published_at=published_at,
             language="zh-CN",
             channel=(path_parts[-3] if len(path_parts) >= 3 else None),
+            media=[RawDazhongVideo(url=link) for link in document.video_links],
             rights=RawRightsDeclaration(
                 status="permission_required",
                 copyright_holder="大众新闻",
@@ -394,7 +392,10 @@ class PikabuPublicPageCollector(AuthorizedPublicPageCollector[RawPikabuItem]):
             title=document.source.title,
             author_username=document.source.author,
             published_at=published_at,
-            blocks=[PikabuTextBlock(text=document.content)],
+            blocks=[
+                PikabuTextBlock(text=document.content),
+                *(PikabuVideoBlock(url=link) for link in document.video_links),
+            ],
             language="ru",
             publisher="Pikabu",
             rights=RawRightsDeclaration(

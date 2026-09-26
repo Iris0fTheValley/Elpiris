@@ -14,6 +14,10 @@ from pydantic import BaseModel, ConfigDict
 from god_news.domain.enums import SourceKind
 from god_news.domain.models import FetchedDocument, SourceRequest, SourceSnapshot, UrlSource
 from god_news.errors import FetchError
+from god_news.infrastructure.fetchers.html_content import (
+    choose_article_text,
+    extract_html_content,
+)
 from god_news.infrastructure.fetchers.url_policy import UrlPolicy
 from god_news.infrastructure.processes import run_json_worker
 
@@ -169,9 +173,38 @@ class DrissionPageFetcher:
             raise FetchError(response.error or "DrissionPage failed to render the source.")
         final_url = await self._policy.validate(response.final_url)
         parsed_html = _parse_html(response.html)
-        content = "\n".join(parsed_html.parts).strip()
+        visible = extract_html_content(response.html, final_url)
+        article_text: str | None = None
+        try:
+            from trafilatura import bare_extraction
+
+            article = bare_extraction(
+                response.html,
+                url=final_url,
+                include_comments=False,
+                include_tables=False,
+                favor_precision=True,
+                deduplicate=True,
+            )
+            extracted = (
+                article.get("text") if isinstance(article, dict) else getattr(article, "text", None)
+            )
+            article_text = extracted if isinstance(extracted, str) else None
+        except (ImportError, ValueError):
+            pass
+        content = choose_article_text(article_text, visible.text, self._min_content_characters)
         outbound_links = _absolute_http_links(parsed_html.links, final_url)
-        if len(content) < self._min_content_characters and not outbound_links:
+        if not content and visible.video_links:
+            title = (response.title or "").strip()
+            if title and title != "Untitled source":
+                content = title
+        if not content:
+            raise FetchError("DrissionPage returned no readable content.")
+        if (
+            len(content) < self._min_content_characters
+            and not outbound_links
+            and not visible.video_links
+        ):
             raise FetchError("DrissionPage returned insufficient visible content.")
         return FetchedDocument(
             source=SourceSnapshot(
@@ -185,6 +218,7 @@ class DrissionPageFetcher:
             ),
             content=content,
             outbound_links=outbound_links,
+            video_links=visible.video_links,
         )
 
     async def aclose(self) -> None:

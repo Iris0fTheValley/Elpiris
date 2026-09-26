@@ -39,6 +39,7 @@ class ScrapyWorkerResponse(BaseModel):
     author: str | None = None
     published_at: datetime | None = None
     outbound_links: list[str] = Field(default_factory=list, max_length=500)
+    video_links: list[str] = Field(default_factory=list, max_length=50)
     http_status: int | None = None
     error_code: str | None = None
     error: str | None = None
@@ -112,7 +113,11 @@ class ScrapyTrafilaturaFetcher:
             )
         final_url = await self._policy.validate(response.final_url)
         content = response.content.strip()
-        if len(content) < self._min_content_characters and not response.outbound_links:
+        if (
+            len(content) < self._min_content_characters
+            and not response.outbound_links
+            and not response.video_links
+        ):
             raise FetchError("Trafilatura returned insufficient article content.")
         return FetchedDocument(
             source=SourceSnapshot(
@@ -127,6 +132,7 @@ class ScrapyTrafilaturaFetcher:
             ),
             content=content,
             outbound_links=response.outbound_links,
+            video_links=response.video_links,
         )
 
     async def aclose(self) -> None:

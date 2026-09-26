@@ -26,6 +26,7 @@ def _document(
     content: str,
     published_at: datetime | None = None,
     outbound_links: list[str] | None = None,
+    video_links: list[str] | None = None,
 ) -> FetchedDocument:
     return FetchedDocument(
         source=SourceSnapshot(
@@ -39,6 +40,7 @@ def _document(
         ),
         content=content,
         outbound_links=outbound_links or [],
+        video_links=video_links or [],
     )
 
 
@@ -294,6 +296,7 @@ async def test_dazhong_public_pages_use_existing_fetch_layers() -> None:
                 title="陌生人伸出援手",
                 content="一位陌生人停下来帮助老人, 家人随后表达了感谢。",
                 published_at=datetime(2026, 7, 12, 8, tzinfo=UTC),
+                video_links=["https://media.dzng.com/help.mp4"],
             ),
         }
     )
@@ -315,6 +318,7 @@ async def test_dazhong_public_pages_use_existing_fetch_layers() -> None:
         "item",
     ]
     assert run.items[0].source == "dazhong"
+    assert str(run.items[0].media[0].url) == "https://media.dzng.com/help.mp4"
 
 
 @pytest.mark.asyncio
@@ -358,6 +362,72 @@ async def test_pikabu_captcha_stops_before_remaining_story_urls() -> None:
     assert fetcher.calls == [listing_url, first_url]
     assert run.errors[-1].code == "captcha_detected"
     assert run.attempts[-1].outcome == "stopped"
+
+
+@pytest.mark.asyncio
+async def test_pikabu_story_maps_discovered_direct_video_for_acquisition() -> None:
+    story_url = "https://pikabu.ru/story/help_12345"
+    media_url = "https://cdn.example/help.mp4?quality=high"
+    collector = PikabuPublicPageCollector(
+        fetcher=ScriptedTracedFetcher(
+            {
+                story_url: _document(
+                    story_url,
+                    title="A helpful neighbour",
+                    content="A neighbour helped a stranger home.",
+                    published_at=datetime(2026, 7, 12, 9, tzinfo=UTC),
+                    video_links=[media_url],
+                )
+            }
+        ),
+        endpoint=story_url,
+        enabled=True,
+        public_page_use_authorized=True,
+        default_limit=10,
+        allowed_host_suffixes=("pikabu.ru",),
+    )
+
+    run = await collector.collect(limit=1)
+
+    assert run.outcome == "succeeded"
+    assert run.items[0].blocks[1].kind == "video"
+    assert str(run.items[0].blocks[1].url) == media_url
+
+
+def test_reddit_video_falls_back_to_preview_then_direct_outbound_mp4() -> None:
+    from god_news.sources.collectors.reddit import _PostData
+
+    base = {
+        "id": "abc123",
+        "permalink": "/r/HumansBeingBros/comments/abc123/kind/",
+        "title": "A kind act",
+        "created_utc": 1_783_700_000,
+        "subreddit": "HumansBeingBros",
+        "is_self": False,
+    }
+    preview = _PostData.model_validate(
+        {
+            **base,
+            "secure_media": {},
+            "preview": {
+                "reddit_video_preview": {
+                    "fallback_url": "https://v.redd.it/example/DASH_720.mp4",
+                    "duration": 12,
+                }
+            },
+        }
+    )
+    direct = _PostData.model_validate(
+        {**base, "url_overridden_by_dest": "https://cdn.example/source.mp4?token=x"}
+    )
+
+    preview_item = RedditOAuthCollector._map_post(preview)
+    direct_item = RedditOAuthCollector._map_post(direct)
+    assert preview_item.video is not None
+    assert str(preview_item.video.fallback_url) == "https://v.redd.it/example/DASH_720.mp4"
+    assert preview_item.video.duration_ms == 12_000
+    assert direct_item.video is not None
+    assert str(direct_item.video.fallback_url) == "https://cdn.example/source.mp4?token=x"
 
 
 @pytest.mark.asyncio

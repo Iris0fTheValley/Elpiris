@@ -52,11 +52,15 @@ class HttpSourceMediaDownloader(SourceMediaDownloader):
                             self._client.stream(
                                 "GET",
                                 url,
-                                headers={
-                                    "Accept": "video/mp4,application/octet-stream;q=0.8"
-                                },
+                                headers={"Accept": "video/mp4,application/octet-stream;q=0.8"},
                             )
                         )
+                        if (
+                            response.status_code == 429 or response.status_code >= 500
+                        ) and attempt < self._max_attempts:
+                            await response.aclose()
+                            await asyncio.sleep(min(0.25 * (2 ** (attempt - 1)), 2.0))
+                            continue
                         break
                     except httpx.HTTPError as exc:
                         last_error = exc
@@ -120,6 +124,10 @@ class HttpSourceMediaDownloader(SourceMediaDownloader):
                 }
                 try:
                     async with self._client.stream("GET", url, headers=headers) as response:
+                        if (
+                            response.status_code == 429 or response.status_code >= 500
+                        ) and attempt < self._max_attempts:
+                            continue
                         _validate_resume_response(
                             story_id,
                             response,
